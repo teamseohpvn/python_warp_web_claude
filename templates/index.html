@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude SEO & Blog Commander</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <!-- xterm.js CSS -->
+  <link rel="stylesheet" href="/static/lib/xterm.css">
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <!-- Fullscreen Login Security Overlay -->
+  <div id="login-overlay" class="login-overlay">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-icon">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="#E06D53"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#06B6D4"/>
+          </svg>
+        </div>
+        <h2 class="login-title">Claude Studio Hub</h2>
+        <p class="login-subtitle">Nhập mật khẩu truy cập để mở khóa hệ thống</p>
+      </div>
+
+      <form id="login-form" class="login-form">
+        <div class="login-input-group">
+          <label for="login-password">Mật khẩu quản trị:</label>
+          <div class="password-wrapper">
+            <input type="password" id="login-password" placeholder="Nhập mật khẩu..." autocomplete="current-password" required autofocus />
+            <button type="button" id="btn-toggle-pwd" class="btn-toggle-pwd" title="Hiện/Ẩn mật khẩu">👁️</button>
+          </div>
+        </div>
+
+        <div id="login-error-msg" class="login-error-msg" style="display: none;"></div>
+
+        <div class="login-rate-notice">
+          🛡️ Giới hạn bảo mật: Tối đa 10 lần nhập trong 1 phút.
+        </div>
+
+        <button type="submit" id="btn-submit-login" class="btn btn-primary btn-block">
+          <span>Mở Khóa Hệ Thống</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="app-layout">
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+      <div class="nav-brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="#E06D53" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 17L12 22L22 17" stroke="#06B6D4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12L12 17L22 12" stroke="#E06D53" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">Claude Studio Hub</span>
+          <span class="brand-subtitle">SEO & Blog Commander</span>
+        </div>
+      </div>
+
+      <div class="nav-center">
+        <!-- Directory Selector -->
+        <div class="cwd-selector-wrapper">
+          <span class="cwd-label">Thư mục làm việc:</span>
+          <select id="cwd-select" class="cwd-dropdown" title="Chọn thư mục dự án">
+            <!-- Populated dynamically -->
+          </select>
+          <span id="cwd-badge" class="cwd-badge">Active</span>
+        </div>
+      </div>
+
+      <div class="nav-right">
+        <!-- Server Connection Pulse -->
+        <div class="status-indicator">
+          <span class="pulse-dot"></span>
+          <span class="status-text">Server Online</span>
+        </div>
+        <button id="btn-logout" class="btn btn-sm btn-secondary" title="Đăng xuất tài khoản">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          <span>Khóa</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Navigation Tabs -->
+    <div class="tabs-header">
+      <button class="tab-btn active" data-tab="tab-runner">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <span>Command Hub</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-terminal">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+        <span>Interactive Terminal (PTY)</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-reports">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        <span>Reports & Documents</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-logs">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span>In/Out Logs</span>
+      </button>
+    </div>
+
+    <!-- Main Workspace Views -->
+    <main class="main-content">
+      <!-- TAB 1: COMMAND RUNNER & PRESETS -->
+      <section id="tab-runner" class="tab-pane active">
+        <div class="runner-grid">
+          <!-- Left Column: Presets & Custom Command -->
+          <div class="presets-panel">
+            <div class="panel-header">
+              <h3>⚡ Quick Presets (1-Click Actions)</h3>
+              <p>Chọn các tác vụ định sẵn cho Claude SEO & Claude Blog</p>
+            </div>
+
+            <!-- Custom Command Input -->
+            <div class="custom-command-card">
+              <label for="custom-cmd-input" class="card-label">Gõ lệnh tùy ý:</label>
+              <div class="custom-input-group">
+                <input type="text" id="custom-cmd-input" placeholder="Ví dụ: claude -p '/seo:audit https://...' hoặc python3 scripts/..." />
+                <button id="btn-run-custom" class="btn btn-primary">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                  <span>Chạy</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Presets Accordion / Container -->
+            <div id="presets-container" class="presets-container">
+              <!-- Populated by JavaScript -->
+            </div>
+          </div>
+
+          <!-- Right Column: Live Output Console -->
+          <div class="console-panel">
+            <div class="console-header">
+              <div class="console-title">
+                <span class="terminal-dot red"></span>
+                <span class="terminal-dot yellow"></span>
+                <span class="terminal-dot green"></span>
+                <span class="console-label">Live Output Console</span>
+                <span id="task-status-badge" class="badge badge-idle">IDLE</span>
+              </div>
+              <div class="console-actions">
+                <span id="task-timer" class="task-timer">00:00</span>
+                <button id="btn-cancel-task" class="btn btn-sm btn-danger" style="display:none;">Dừng Task</button>
+                <button id="btn-copy-console" class="btn btn-sm btn-secondary" title="Sao chép toàn bộ">Copy</button>
+                <button id="btn-clear-console" class="btn btn-sm btn-secondary" title="Xóa màn hình">Clear</button>
+                <label class="toggle-scroll" title="Tự động cuộn theo log">
+                  <input type="checkbox" id="chk-autoscroll" checked>
+                  <span>Auto-scroll</span>
+                </label>
+              </div>
+            </div>
+
+            <div id="console-output" class="console-output">
+              <div class="console-placeholder">
+                <p>🚀 Hệ thống sẵn sàng. Chọn một tác vụ bên trái hoặc gõ lệnh để bắt đầu.</p>
+                <p class="text-muted">Toàn bộ Input / Output sẽ được ghi tự động vào file log và hiển thị trực tiếp tại đây.</p>
+              </div>
+            </div>
+
+            <div class="console-footer">
+              <span id="current-task-info" class="task-info-text">Chưa có tác vụ nào đang chạy</span>
+              <span id="current-log-file" class="log-file-text"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: INTERACTIVE TERMINAL (PTY) -->
+      <section id="tab-terminal" class="tab-pane">
+        <div class="terminal-view-wrapper">
+          <!-- Terminal Quick Toolbar -->
+          <div class="terminal-toolbar">
+            <div class="toolbar-group">
+              <button class="btn btn-sm btn-tool" id="btn-term-claude">
+                <span class="icon">✨</span> Chạy <code>claude</code>
+              </button>
+              <button class="btn btn-sm btn-tool" id="btn-term-seo-doc">
+                <span class="icon">🩺</span> <code>/seo doctor</code>
+              </button>
+              <button class="btn btn-sm btn-tool" id="btn-term-seo-audit">
+                <span class="icon">🔍</span> <code>/seo:audit</code>
+              </button>
+              <button class="btn btn-sm btn-tool" id="btn-term-blog">
+                <span class="icon">📝</span> <code>/blog</code>
+              </button>
+            </div>
+            <div class="toolbar-group">
+              <button class="btn btn-sm btn-secondary" id="btn-term-copy" title="Sao chép đoạn bôi đen hoặc toàn bộ terminal">📋 Copy Text</button>
+              <button class="btn btn-sm btn-danger" id="btn-term-ctrl-c" title="Gửi ngắt lệnh Ctrl+C">Ctrl+C</button>
+              <button class="btn btn-sm btn-secondary" id="btn-term-clear" title="Xóa màn hình Terminal">Clear</button>
+              <button class="btn btn-sm btn-secondary" id="btn-term-reconnect" title="Kết nối lại Terminal">Khởi động lại</button>
+            </div>
+          </div>
+
+          <!-- xterm.js Canvas Container -->
+          <div id="terminal-container" class="terminal-container"></div>
+        </div>
+      </section>
+
+      <!-- TAB 3: REPORTS & DOCUMENTS -->
+      <section id="tab-reports" class="tab-pane">
+        <div class="reports-layout">
+          <!-- Sidebar: List of Reports -->
+          <div class="reports-sidebar">
+            <div class="sidebar-header">
+              <h4>📑 Danh sách Báo cáo</h4>
+              <button id="btn-refresh-reports" class="btn btn-sm btn-secondary" title="Tải lại danh sách">Làm mới</button>
+            </div>
+            <div class="reports-filter">
+              <input type="text" id="report-search" placeholder="Tìm theo tên file..." />
+            </div>
+            <div id="reports-list" class="reports-list">
+              <!-- Populated by JavaScript -->
+            </div>
+          </div>
+
+          <!-- Main: Markdown Document Viewer -->
+          <div class="report-viewer-panel">
+            <div class="report-viewer-header">
+              <div class="report-meta">
+                <span id="report-view-title" class="report-title">Chọn một file báo cáo để xem</span>
+                <span id="report-view-path" class="report-path"></span>
+              </div>
+              <div class="report-actions">
+                <button id="btn-toggle-raw" class="btn btn-sm btn-secondary" style="display:none;">Xem mã Markdown thô</button>
+                <button id="btn-copy-report" class="btn btn-sm btn-secondary" style="display:none;">Copy nội dung</button>
+              </div>
+            </div>
+            <div id="report-view-body" class="report-view-body">
+              <div class="viewer-placeholder">
+                <p>👈 Hãy chọn một báo cáo Markdown từ danh sách bên trái để đọc nội dung được định dạng chuẩn.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: IN/OUT LOGS -->
+      <section id="tab-logs" class="tab-pane">
+        <div class="logs-panel">
+          <div class="logs-header">
+            <div>
+              <h3>📜 Lịch sử Log In/Out</h3>
+              <p>Tất cả câu lệnh, phiên làm việc terminal và task chạy ngầm đều được ghi lại đầy đủ</p>
+            </div>
+            <div class="logs-filter-group">
+              <input type="text" id="log-search-input" placeholder="Lọc theo tên log..." />
+              <button id="btn-refresh-logs" class="btn btn-secondary">Làm mới</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="logs-table">
+              <thead>
+                <tr>
+                  <th>Tên file Log</th>
+                  <th>Loại phiên</th>
+                  <th>Thời gian</th>
+                  <th>Dung lượng</th>
+                  <th style="text-align: right;">Hành động</th>
+                </tr>
+              </thead>
+              <tbody id="logs-table-body">
+                <!-- Populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal View Full Log -->
+  <div id="log-modal" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h4 id="modal-log-title">Chi tiết Log</h4>
+          <span id="modal-log-meta" class="text-muted"></span>
+        </div>
+        <div class="modal-actions">
+          <a id="modal-download-btn" href="#" class="btn btn-sm btn-primary" download>Tải file</a>
+          <button id="modal-close-btn" class="btn btn-sm btn-secondary">Đóng</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <pre id="modal-log-content" class="log-pre-viewer"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vendor Scripts -->
+  <script src="/static/lib/xterm.js"></script>
+  <script src="/static/lib/xterm-addon-fit.js"></script>
+  <script src="/static/lib/marked.min.js"></script>
+
+  <!-- Application Logic -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
