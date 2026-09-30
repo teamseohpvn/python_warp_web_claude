@@ -8,7 +8,8 @@ from pydantic import BaseModel
 from app.config import (
     BASE_DIR, PRESET_PROJECTS, PRESETS, LOG_DIR,
     TASK_LOG_DIR, SESSION_LOG_DIR, AUDIT_LOG_DIR,
-    AUTH_ENABLED, AUTH_PASSWORD, AUTH_COOKIE_NAME
+    AUTH_ENABLED, AUTH_PASSWORD, AUTH_COOKIE_NAME,
+    GUIDES
 )
 from app.auth import (
     rate_limiter, get_client_ip, create_session,
@@ -124,8 +125,13 @@ async def get_config():
         })
     return {
         "projects": projects,
-        "presets": PRESETS
+        "presets": PRESETS,
+        "guides": GUIDES
     }
+
+@app.get("/api/guides", dependencies=[Depends(require_auth)])
+async def get_guides():
+    return GUIDES
 
 @app.post("/api/tasks/run", dependencies=[Depends(require_auth)])
 async def run_task(req: RunTaskRequest):

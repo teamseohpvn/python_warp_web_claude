@@ -17,7 +17,10 @@ const state = {
   terminalWs: null,
   reports: [],
   selectedReport: null,
-  showingRawReport: false
+  showingRawReport: false,
+  guides: {},
+  activeGuideTool: "seo",
+  isGuideOpen: false
 };
 
 // ==========================================================================
@@ -57,6 +60,7 @@ async function initApp() {
   setupTerminal();
   setupReports();
   setupLogs();
+  setupGuides();
 }
 
 function setupAuth() {
@@ -274,6 +278,7 @@ async function loadConfig() {
       badge.textContent = state.activeCwd.split("/").pop() || "Root";
     });
 
+    state.guides = data.guides || {};
     renderPresets(data.presets);
   } catch (err) {
     console.error("Lỗi tải cấu hình:", err);
@@ -560,13 +565,15 @@ function setupTerminal() {
   });
 
   // Quick Action Buttons
-  document.getElementById("btn-term-claude").addEventListener("click", () => sendToTerminal("claude\r"));
-  document.getElementById("btn-term-seo-doc").addEventListener("click", () => sendToTerminal("/seo doctor\r"));
-  document.getElementById("btn-term-seo-audit").addEventListener("click", () => sendToTerminal("/seo:audit "));
-  document.getElementById("btn-term-blog").addEventListener("click", () => sendToTerminal("/blog\r"));
-  document.getElementById("btn-term-ctrl-c").addEventListener("click", () => sendToTerminal("\x03"));
-  document.getElementById("btn-term-clear").addEventListener("click", () => sendToTerminal("clear\r"));
-  document.getElementById("btn-term-reconnect").addEventListener("click", () => connectTerminalWs());
+  document.getElementById("btn-term-claude")?.addEventListener("click", () => sendToTerminal("claude\r"));
+  document.getElementById("btn-term-seo-doc")?.addEventListener("click", () => sendToTerminal("/seo doctor\r"));
+  document.getElementById("btn-term-seo-audit")?.addEventListener("click", () => sendToTerminal("/seo audit "));
+  document.getElementById("btn-term-blog")?.addEventListener("click", () => sendToTerminal("/blog\r"));
+  document.getElementById("btn-term-ads")?.addEventListener("click", () => sendToTerminal("/ads\r"));
+  document.getElementById("btn-term-kwp")?.addEventListener("click", () => sendToTerminal("cd /projects/keywordpro && pnpm start\r"));
+  document.getElementById("btn-term-ctrl-c")?.addEventListener("click", () => sendToTerminal("\x03"));
+  document.getElementById("btn-term-clear")?.addEventListener("click", () => sendToTerminal("clear\r"));
+  document.getElementById("btn-term-reconnect")?.addEventListener("click", () => connectTerminalWs());
 
   // Copy Text button handler
   const termCopyBtn = document.getElementById("btn-term-copy");
@@ -864,10 +871,315 @@ async function openLogModal(filename) {
 }
 
 function escapeHtml(text) {
-  return text
+  if (!text) return "";
+  return String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function escapeAttr(text) {
+  if (!text) return "";
+  return String(text).replace(/"/g, "&quot;");
+}
+
+// ==========================================================================
+// 8. Tool Guides & Right 25% Sidebar Manager
+// ==========================================================================
+function setupGuides() {
+  const guideMenuBtn = document.getElementById("btn-guide-menu");
+  const guideDropdown = document.getElementById("guide-dropdown");
+  const guideMenuContainer = document.querySelector(".guide-menu-container");
+  const guideSidebar = document.getElementById("guide-sidebar");
+  const closeGuideBtn = document.getElementById("btn-close-guide");
+  const toggleGuidePill = document.getElementById("btn-toggle-guide-panel");
+  const searchInput = document.getElementById("guide-search-input");
+  const clearSearchBtn = document.getElementById("btn-clear-guide-search");
+  const guidePills = document.querySelectorAll(".guide-pill");
+  const dropdownItems = document.querySelectorAll(".guide-dropdown-item");
+
+  // Toggle Dropdown Menu in Navbar
+  if (guideMenuBtn && guideDropdown) {
+    guideMenuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = guideDropdown.style.display === "block";
+      guideDropdown.style.display = isOpen ? "none" : "block";
+      guideMenuContainer?.classList.toggle("open", !isOpen);
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!guideMenuContainer?.contains(e.target)) {
+        guideDropdown.style.display = "none";
+        guideMenuContainer?.classList.remove("open");
+      }
+    });
+  }
+
+  // Handle clicking items in the Navbar Dropdown
+  dropdownItems.forEach(item => {
+    item.addEventListener("click", () => {
+      const toolId = item.dataset.tool;
+      if (guideDropdown) guideDropdown.style.display = "none";
+      guideMenuContainer?.classList.remove("open");
+      openGuideSidebar(toolId);
+    });
+  });
+
+  // Handle Toggle Button on Tabs Header
+  if (toggleGuidePill) {
+    toggleGuidePill.addEventListener("click", () => {
+      if (state.isGuideOpen) {
+        closeGuideSidebar();
+      } else {
+        openGuideSidebar(state.activeGuideTool || "seo");
+      }
+    });
+  }
+
+  // Handle Close Button inside Sidebar
+  if (closeGuideBtn) {
+    closeGuideBtn.addEventListener("click", () => {
+      closeGuideSidebar();
+    });
+  }
+
+  // Handle Sidebar Tool Switcher Pills
+  guidePills.forEach(pill => {
+    pill.addEventListener("click", () => {
+      const toolId = pill.dataset.tool;
+      switchGuideTool(toolId);
+    });
+  });
+
+  // Handle Search Input in Sidebar
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      const query = e.target.value.trim().toLowerCase();
+      if (clearSearchBtn) clearSearchBtn.style.display = query ? "block" : "none";
+      renderFilteredGuideCommands(query);
+    });
+  }
+
+  if (clearSearchBtn && searchInput) {
+    clearSearchBtn.addEventListener("click", () => {
+      searchInput.value = "";
+      clearSearchBtn.style.display = "none";
+      renderFilteredGuideCommands("");
+      searchInput.focus();
+    });
+  }
+}
+
+function openGuideSidebar(toolId) {
+  const guideSidebar = document.getElementById("guide-sidebar");
+  const toggleGuidePill = document.getElementById("btn-toggle-guide-panel");
+  const activeBadge = document.getElementById("guide-active-badge");
+
+  state.isGuideOpen = true;
+  state.activeGuideTool = toolId || "seo";
+
+  if (guideSidebar) {
+    guideSidebar.style.display = "flex";
+  }
+
+  if (toggleGuidePill) {
+    toggleGuidePill.classList.add("active");
+  }
+  if (activeBadge) {
+    activeBadge.style.display = "inline-block";
+    activeBadge.textContent = (toolId || "seo").toUpperCase();
+  }
+
+  switchGuideTool(state.activeGuideTool);
+
+  // Trigger terminal resize when layout width changes (100% -> 75%)
+  setTimeout(() => {
+    if (state.fitAddon) {
+      try {
+        state.fitAddon.fit();
+        sendTerminalResize();
+      } catch (e) {}
+    }
+  }, 260);
+}
+
+function closeGuideSidebar() {
+  const guideSidebar = document.getElementById("guide-sidebar");
+  const toggleGuidePill = document.getElementById("btn-toggle-guide-panel");
+  const activeBadge = document.getElementById("guide-active-badge");
+
+  state.isGuideOpen = false;
+
+  if (guideSidebar) {
+    guideSidebar.style.display = "none";
+  }
+  if (toggleGuidePill) {
+    toggleGuidePill.classList.remove("active");
+  }
+  if (activeBadge) {
+    activeBadge.style.display = "none";
+  }
+
+  // Trigger terminal resize when layout width returns to 100%
+  setTimeout(() => {
+    if (state.fitAddon) {
+      try {
+        state.fitAddon.fit();
+        sendTerminalResize();
+      } catch (e) {}
+    }
+  }, 260);
+}
+
+function switchGuideTool(toolId) {
+  state.activeGuideTool = toolId;
+  const toolData = state.guides ? state.guides[toolId] : null;
+  if (!toolData) return;
+
+  // Update Pills
+  document.querySelectorAll(".guide-pill").forEach(p => {
+    p.classList.toggle("active", p.dataset.tool === toolId);
+  });
+
+  // Update Dropdown Items
+  document.querySelectorAll(".guide-dropdown-item").forEach(d => {
+    d.classList.toggle("active", d.dataset.tool === toolId);
+  });
+
+  // Update Header
+  const toolIcon = document.getElementById("guide-tool-icon");
+  const toolName = document.getElementById("guide-tool-name");
+  const toolBadge = document.getElementById("guide-tool-badge");
+  const toolSummary = document.getElementById("guide-tool-summary");
+
+  if (toolIcon) toolIcon.textContent = toolData.icon || "📖";
+  if (toolName) toolName.textContent = toolData.name || "Tool Guide";
+  if (toolBadge) toolBadge.textContent = toolData.badge || `${toolData.commands?.length || 0} Commands`;
+  if (toolSummary) {
+    toolSummary.innerHTML = `<strong>${toolData.name}:</strong> ${toolData.summary || ''}`;
+  }
+
+  // Clear search and render commands
+  const searchInput = document.getElementById("guide-search-input");
+  if (searchInput) searchInput.value = "";
+  const clearSearchBtn = document.getElementById("btn-clear-guide-search");
+  if (clearSearchBtn) clearSearchBtn.style.display = "none";
+
+  renderFilteredGuideCommands("");
+}
+
+function renderFilteredGuideCommands(query) {
+  const listContainer = document.getElementById("guide-commands-list");
+  if (!listContainer) return;
+
+  const toolData = state.guides ? state.guides[state.activeGuideTool] : null;
+  if (!toolData || !toolData.commands) {
+    listContainer.innerHTML = `<div class="guide-empty-state">Đang tải dữ liệu lệnh...</div>`;
+    return;
+  }
+
+  let commands = toolData.commands;
+  if (query) {
+    commands = commands.filter(c =>
+      c.cmd.toLowerCase().includes(query) ||
+      (c.desc && c.desc.toLowerCase().includes(query)) ||
+      (c.category && c.category.toLowerCase().includes(query))
+    );
+  }
+
+  if (commands.length === 0) {
+    listContainer.innerHTML = `
+      <div class="guide-empty-state">
+        <p>🔍 Không tìm thấy lệnh nào khớp với: "<strong>${escapeHtml(query)}</strong>"</p>
+        <p><small>Thử tìm từ khóa khác như "audit", "schema", "serp", "crawl"...</small></p>
+      </div>
+    `;
+    return;
+  }
+
+  listContainer.innerHTML = commands.map((c, idx) => {
+    return `
+      <div class="guide-cmd-card" data-cmd-idx="${idx}">
+        <div class="guide-cmd-meta">
+          <span class="guide-cmd-cat">${c.category || 'Chung'}</span>
+          <div class="guide-cmd-actions">
+            <button class="btn-cmd-action btn-insert" title="Chèn câu lệnh này vào ô nhập lệnh hoặc Terminal" data-cmd="${escapeAttr(c.cmd)}">
+              <span>⚡ Chèn</span>
+            </button>
+            <button class="btn-cmd-action btn-copy" title="Sao chép câu lệnh" data-cmd="${escapeAttr(c.cmd)}">
+              <span>📋 Copy</span>
+            </button>
+          </div>
+        </div>
+        <div class="guide-cmd-syntax">
+          <code>${formatCmdSyntax(c.cmd)}</code>
+        </div>
+        <div class="guide-cmd-desc">${escapeHtml(c.desc)}</div>
+        ${c.example && c.example !== c.cmd ? `<div class="guide-cmd-example">Ví dụ: <code>${escapeHtml(c.example)}</code></div>` : ''}
+      </div>
+    `;
+  }).join("");
+
+  // Attach event handlers to buttons in cards
+  listContainer.querySelectorAll(".btn-copy").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const cmd = btn.dataset.cmd;
+      try {
+        await navigator.clipboard.writeText(cmd);
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = `<span>✓ Đã chép</span>`;
+        btn.style.borderColor = "var(--accent-emerald)";
+        btn.style.color = "var(--accent-emerald)";
+        setTimeout(() => {
+          btn.innerHTML = originalHtml;
+          btn.style.borderColor = "";
+          btn.style.color = "";
+        }, 1500);
+      } catch (err) {
+        console.error("Copy failed:", err);
+      }
+    });
+  });
+
+  listContainer.querySelectorAll(".btn-insert").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const cmd = btn.dataset.cmd;
+
+      // Check active tab
+      const activeTabBtn = document.querySelector(".tab-btn.active");
+      const activeTab = activeTabBtn ? activeTabBtn.dataset.tab : "tab-runner";
+
+      if (activeTab === "tab-terminal") {
+        sendToTerminal(cmd);
+      } else {
+        // Default to command runner input
+        const customInput = document.getElementById("custom-cmd-input");
+        if (customInput) {
+          customInput.value = cmd;
+          customInput.focus();
+          customInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }
+
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = `<span>✓ Đã chèn</span>`;
+      btn.style.borderColor = "var(--accent-emerald)";
+      setTimeout(() => {
+        btn.innerHTML = originalHtml;
+        btn.style.borderColor = "";
+      }, 1500);
+    });
+  });
+}
+
+function formatCmdSyntax(cmd) {
+  const parts = escapeHtml(cmd).split(" ");
+  if (parts.length === 0) return cmd;
+  const prefix = parts[0];
+  const rest = parts.slice(1).join(" ");
+  return `<span class="cmd-prefix">${prefix}</span> ${rest}`;
 }

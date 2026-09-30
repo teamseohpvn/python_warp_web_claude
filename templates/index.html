@@ -79,6 +79,46 @@
       </div>
 
       <div class="nav-right">
+        <!-- Guide Selector Menu -->
+        <div class="guide-menu-container">
+          <button id="btn-guide-menu" class="btn btn-sm btn-guide" title="Xem hướng dẫn sử dụng 4 công cụ (25% màn hình)">
+            <span class="guide-btn-icon">📖</span>
+            <span class="guide-btn-text">Hướng Dẫn Lệnh</span>
+            <span class="guide-chevron">▾</span>
+          </button>
+          <div id="guide-dropdown" class="guide-dropdown" style="display: none;">
+            <div class="guide-dropdown-header">Chọn công cụ tra cứu lệnh:</div>
+            <div class="guide-dropdown-item" data-tool="seo">
+              <span class="guide-item-icon">🔍</span>
+              <div class="guide-item-text">
+                <div class="guide-item-title">Claude SEO</div>
+                <div class="guide-item-desc">Audit, Page, Technical, Schema, GEO, DataForSEO, Firecrawl</div>
+              </div>
+            </div>
+            <div class="guide-dropdown-item" data-tool="blog">
+              <span class="guide-item-icon">📝</span>
+              <div class="guide-item-text">
+                <div class="guide-item-title">Claude Blog</div>
+                <div class="guide-item-desc">Viết bài, kiểm định 5-gate, Content Brief, Topic Cluster</div>
+              </div>
+            </div>
+            <div class="guide-dropdown-item" data-tool="ads">
+              <span class="guide-item-icon">📢</span>
+              <div class="guide-item-text">
+                <div class="guide-item-title">Claude Ads</div>
+                <div class="guide-item-desc">Audit tài khoản, kế hoạch quảng cáo, Google, Meta, Ngân sách</div>
+              </div>
+            </div>
+            <div class="guide-dropdown-item" data-tool="keyword">
+              <span class="guide-item-icon">🔑</span>
+              <div class="guide-item-text">
+                <div class="guide-item-title">Keyword Pro</div>
+                <div class="guide-item-desc">Bàn làm việc nghiên cứu từ khóa, DataForSEO, API, PostgreSQL</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Server Connection Pulse -->
         <div class="status-indicator">
           <span class="pulse-dot"></span>
@@ -97,26 +137,38 @@
 
     <!-- Main Navigation Tabs -->
     <div class="tabs-header">
-      <button class="tab-btn active" data-tab="tab-runner">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-        <span>Command Hub</span>
-      </button>
-      <button class="tab-btn" data-tab="tab-terminal">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-        <span>Interactive Terminal (PTY)</span>
-      </button>
-      <button class="tab-btn" data-tab="tab-reports">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-        <span>Reports & Documents</span>
-      </button>
-      <button class="tab-btn" data-tab="tab-logs">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        <span>In/Out Logs</span>
-      </button>
+      <div class="tabs-nav-group">
+        <button class="tab-btn active" data-tab="tab-runner">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span>Command Hub</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-terminal">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          <span>Interactive Terminal (PTY)</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-reports">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          <span>Reports & Documents</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-logs">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>In/Out Logs</span>
+        </button>
+      </div>
+
+      <!-- Quick Guide Toggle in Tab Header -->
+      <div class="tabs-actions">
+        <button id="btn-toggle-guide-panel" class="btn-guide-pill" title="Bật/Tắt hướng dẫn lệnh (chiếm 25% màn hình)">
+          <span class="icon">📖</span>
+          <span>Tra cứu câu lệnh</span>
+          <span id="guide-active-badge" class="badge-guide-active" style="display: none;">Đang mở</span>
+        </button>
+      </div>
     </div>
 
-    <!-- Main Workspace Views -->
-    <main class="main-content">
+    <!-- Main Workspace Views with Collapsible 25% Guide Sidebar -->
+    <div class="workspace-wrapper">
+      <main class="main-content">
       <!-- TAB 1: COMMAND RUNNER & PRESETS -->
       <section id="tab-runner" class="tab-pane active">
         <div class="runner-grid">
@@ -195,10 +247,16 @@
                 <span class="icon">🩺</span> <code>/seo doctor</code>
               </button>
               <button class="btn btn-sm btn-tool" id="btn-term-seo-audit">
-                <span class="icon">🔍</span> <code>/seo:audit</code>
+                <span class="icon">🔍</span> <code>/seo audit</code>
               </button>
               <button class="btn btn-sm btn-tool" id="btn-term-blog">
                 <span class="icon">📝</span> <code>/blog</code>
+              </button>
+              <button class="btn btn-sm btn-tool" id="btn-term-ads">
+                <span class="icon">📢</span> <code>/ads</code>
+              </button>
+              <button class="btn btn-sm btn-tool" id="btn-term-kwp">
+                <span class="icon">🔑</span> <code>keywordpro</code>
               </button>
             </div>
             <div class="toolbar-group">
@@ -285,7 +343,47 @@
         </div>
       </section>
     </main>
-  </div>
+
+    <!-- Right 25% Guide Sidebar Panel (Hidden by default, shown when tool is selected) -->
+    <aside id="guide-sidebar" class="guide-sidebar" style="display: none;">
+      <div class="guide-sidebar-header">
+        <div class="guide-header-title">
+          <span id="guide-tool-icon" class="guide-tool-icon">🔍</span>
+          <div class="guide-header-text">
+            <h3 id="guide-tool-name" class="guide-tool-name">Claude SEO</h3>
+            <span id="guide-tool-badge" class="badge-guide-tag">26 Commands</span>
+          </div>
+        </div>
+        <button id="btn-close-guide" class="btn-icon-close" title="Đóng bảng hướng dẫn">✕</button>
+      </div>
+
+      <div class="guide-selector-pills">
+        <button class="guide-pill active" data-tool="seo">🔍 Claude SEO</button>
+        <button class="guide-pill" data-tool="blog">📝 Claude Blog</button>
+        <button class="guide-pill" data-tool="ads">📢 Claude Ads</button>
+        <button class="guide-pill" data-tool="keyword">🔑 Keyword Pro</button>
+      </div>
+
+      <div class="guide-search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="guide-search-input" placeholder="Tìm câu lệnh, giải thích..." />
+        <button id="btn-clear-guide-search" class="btn-clear-search" style="display: none;">✕</button>
+      </div>
+
+      <div class="guide-summary-card" id="guide-tool-summary">
+        <!-- Populated by JS -->
+      </div>
+
+      <div id="guide-commands-list" class="guide-commands-list">
+        <!-- Populated dynamically by JS -->
+      </div>
+
+      <div class="guide-sidebar-footer">
+        <span class="guide-footer-tip">💡 Bấm <strong>⚡ Chèn</strong> để đưa lệnh vào ô chạy, hoặc <strong>📋 Copy</strong></span>
+      </div>
+    </aside>
+  </div> <!-- Close .workspace-wrapper -->
+  </div> <!-- Close .app-layout -->
 
   <!-- Modal View Full Log -->
   <div id="log-modal" class="modal-overlay">
