@@ -12,7 +12,7 @@ for directory in [LOG_DIR, TASK_LOG_DIR, SESSION_LOG_DIR, AUDIT_LOG_DIR]:
 
 # Authentication & Rate Limiting Settings
 AUTH_ENABLED = True
-AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "claude2026")
+AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "mylove2000")
 AUTH_COOKIE_NAME = "claude_hub_token"
 RATE_LIMIT_MAX_ATTEMPTS = 10   # Tối đa 10 lần nhập trong 1 phút
 RATE_LIMIT_WINDOW_SECONDS = 60 # Cửa sổ thời gian 60 giây
