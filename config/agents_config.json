@@ -68,6 +68,28 @@
       "max_tokens": 8192,
       "temperature": 0.7,
       "system_prompt": "Bạn là chuyên gia lập trình và Technical SEO, chuyên xử lý mã nguồn, cấu trúc dữ liệu schema và thuật toán tìm kiếm."
+    },
+    "grok": {
+      "id": "grok",
+      "name": "Grok Agent",
+      "provider": "xai",
+      "badge": "xAI Grok",
+      "color": "#F3F4F6",
+      "icon": "⚫",
+      "description": "Suy luận sắc bén, nắm bắt dữ liệu thực tế và xu hướng mới nhất, tư duy phản biện thẳng thắn về chất lượng bài viết.",
+      "cli_command": "grok",
+      "api_key_env": "XAI_API_KEY",
+      "api_key": "",
+      "base_url": "https://api.x.ai/v1",
+      "default_model": "grok-2-latest",
+      "models": [
+        "grok-2-latest",
+        "grok-2-1212",
+        "grok-beta"
+      ],
+      "max_tokens": 8192,
+      "temperature": 0.7,
+      "system_prompt": "Bạn là chuyên gia phân tích chất lượng nội dung và E-E-A-T theo tiêu chuẩn Google QRG, đánh giá sắc sảo và thẳng thắn về điểm yếu bài viết."
     }
   }
 }

@@ -1,5 +1,5 @@
-// EEAT Content Quality Audit Engine & Interactive Studio
-// Codified from Google Search Quality Rater Guidelines & QuickCreator Content Quality Checker
+// EEAT Content Quality Audit Engine & Interactive Studio (v2.0 Multi-Agent)
+// Connects with FastAPI Backend supporting Claude, Gemini, GPT & Grok API
 
 const DEFAULT_AUDIT_DATA = {
   url: "https://daucongnghiephp.com.vn/dau-thuy-luc/eneos-super-hyrando-68",
@@ -7,8 +7,14 @@ const DEFAULT_AUDIT_DATA = {
   overallScore: 58,
   rating: "MEDIUM",
   summaryVerdict: "Trang web có cấu trúc bài bản, bóc tách thông số kỹ thuật chuẩn nhưng bị <strong>cắt cụt nội dung ở phần kết</strong> và thiếu hoàn toàn <strong>tín hiệu trải nghiệm thực địa tại xưởng máy</strong>.",
-  eeatScore: "Medium (55%)",
-  mcScore: "Medium (61%)",
+  eeatSubScore: "Medium (55%)",
+  mcSubScore: "Medium (61%)",
+  analyzed_by: {
+    agent_id: "claude",
+    agent_name: "Claude Agent",
+    model: "claude-3-7-sonnet",
+    mode: "live_llm_api"
+  },
   
   dimensions: [
     {
@@ -206,8 +212,34 @@ Phuy thép 200L ENEOS chính hãng từ nhà máy Đình Vũ (Hải Phòng) luô
   ]
 };
 
+// Model mapping for quick population
+const AGENT_MODELS = {
+  "claude": [
+    { value: "claude-3-7-sonnet-20250219", label: "claude-3-7-sonnet (Mạnh nhất & sâu sắc)" },
+    { value: "claude-3-5-sonnet-20241022", label: "claude-3-5-sonnet (Cân bằng & sắc nét)" },
+    { value: "claude-3-5-haiku-20241022", label: "claude-3-5-haiku (Tốc độ cao)" }
+  ],
+  "gemini": [
+    { value: "gemini-2.5-flash", label: "gemini-2.5-flash (Cực nhanh & chuẩn)" },
+    { value: "gemini-2.5-pro", label: "gemini-2.5-pro (Ngữ cảnh sâu 1M)" },
+    { value: "gemini-2.0-flash", label: "gemini-2.0-flash" }
+  ],
+  "gpt_code": [
+    { value: "gpt-4o", label: "gpt-4o (Logic & Schema chuẩn)" },
+    { value: "gpt-4o-mini", label: "gpt-4o-mini (Tiết kiệm)" },
+    { value: "o3-mini", label: "o3-mini (Suy luận chuyên sâu)" }
+  ],
+  "grok": [
+    { value: "grok-2-latest", label: "grok-2-latest (xAI Phản biện sắc bén)" },
+    { value: "grok-2-1212", label: "grok-2-1212" },
+    { value: "grok-beta", label: "grok-beta" }
+  ]
+};
+
 // State
+let selectedAgent = "claude";
 let currentAudit = JSON.parse(JSON.stringify(DEFAULT_AUDIT_DATA));
+let availableAgentsData = [];
 
 // DOM Elements
 const overallScoreVal = document.getElementById("overallScoreVal");
@@ -217,6 +249,7 @@ const scoreVerdict = document.getElementById("scoreVerdict");
 const eeatSubScore = document.getElementById("eeatSubScore");
 const mcSubScore = document.getElementById("mcSubScore");
 const flawsCount = document.getElementById("flawsCount");
+const analyzedByBadge = document.getElementById("analyzedByBadge");
 const dimensionsBarList = document.getElementById("dimensionsBarList");
 const issuesListContainer = document.getElementById("issuesListContainer");
 const dimensionsCardsContainer = document.getElementById("dimensionsCardsContainer");
@@ -232,6 +265,13 @@ const btnRunAudit = document.getElementById("btnRunAudit");
 const btnRunAuditText = document.getElementById("btnRunAuditText");
 const btnLoadPreset = document.getElementById("btnLoadPreset");
 const auditSpinner = document.getElementById("auditSpinner");
+const auditSpinner2 = document.getElementById("auditSpinner2");
+const btnRunText = document.getElementById("btnRunText");
+const aiModelSelect = document.getElementById("aiModelSelect");
+const aiTempSelect = document.getElementById("aiTempSelect");
+const aiExecutionNotice = document.getElementById("aiExecutionNotice");
+const aiNoticeText = document.getElementById("aiNoticeText");
+const aiNoticeIcon = document.getElementById("aiNoticeIcon");
 
 // Modals
 const btnExportMd = document.getElementById("btnExportMd");
@@ -241,10 +281,19 @@ const markdownExportArea = document.getElementById("markdownExportArea");
 const btnCopyReport = document.getElementById("btnCopyReport");
 const btnDownloadMd = document.getElementById("btnDownloadMd");
 
-// Init
+// API Key Modal
+const btnOpenApiKeyModal = document.getElementById("btnOpenApiKeyModal");
+const apiKeyModal = document.getElementById("apiKeyModal");
+const btnCloseApiKeyModal = document.getElementById("btnCloseApiKeyModal");
+const btnCloseApiKeyModal2 = document.getElementById("btnCloseApiKeyModal2");
+const apiKeySaveStatus = document.getElementById("apiKeySaveStatus");
+
 document.addEventListener("DOMContentLoaded", () => {
   setupTabs();
   setupViewNavigation();
+  setupAgentSelection();
+  populateModelSelect(selectedAgent);
+  fetchAgentsStatus();
   renderAudit(currentAudit);
   setupListeners();
 });
@@ -279,6 +328,46 @@ function setupViewNavigation() {
   });
 }
 
+function setupAgentSelection() {
+  document.querySelectorAll(".agent-pill").forEach(pill => {
+    pill.addEventListener("click", () => {
+      document.querySelectorAll(".agent-pill").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      selectedAgent = pill.dataset.agent;
+      populateModelSelect(selectedAgent);
+    });
+  });
+}
+
+function populateModelSelect(agentId) {
+  const models = AGENT_MODELS[agentId] || [];
+  aiModelSelect.innerHTML = models.map(m => `<option value="${m.value}">${m.label}</option>`).join("");
+}
+
+async function fetchAgentsStatus() {
+  try {
+    const res = await fetch("/api/eeat/agents");
+    if (res.ok) {
+      const data = await res.json();
+      availableAgentsData = data.agents || [];
+      availableAgentsData.forEach(ag => {
+        const dot = document.getElementById(`dot-${ag.id}`);
+        if (dot) {
+          if (ag.has_key) {
+            dot.classList.add("has-key");
+            dot.title = `Đã cấu hình key: ${ag.masked_key}`;
+          } else {
+            dot.classList.remove("has-key");
+            dot.title = `Chưa có API key`;
+          }
+        }
+      });
+    }
+  } catch (err) {
+    console.log("Chạy ở chế độ frontend độc lập:", err);
+  }
+}
+
 function setupListeners() {
   btnLoadPreset.addEventListener("click", () => {
     targetUrlInput.value = DEFAULT_AUDIT_DATA.url;
@@ -287,7 +376,10 @@ function setupListeners() {
   });
 
   btnRunAudit.addEventListener("click", () => {
-    simulateAuditRun(targetUrlInput.value);
+    executeAuditRequest({
+      url: targetUrlInput.value.trim(),
+      content: ""
+    });
   });
 
   btnRunAuditText.addEventListener("click", () => {
@@ -296,10 +388,13 @@ function setupListeners() {
       alert("Vui lòng dán nội dung văn bản bài viết để kiểm tra!");
       return;
     }
-    analyzeCustomText(text);
+    executeAuditRequest({
+      url: "",
+      content: text
+    });
   });
 
-  // Modal actions
+  // Export Modal
   btnExportMd.addEventListener("click", openExportModal);
   btnCloseModal.addEventListener("click", () => exportModal.classList.add("hidden"));
   btnCopyReport.addEventListener("click", () => {
@@ -308,87 +403,173 @@ function setupListeners() {
     alert("Đã sao chép báo cáo Markdown vào clipboard!");
   });
   btnDownloadMd.addEventListener("click", downloadMarkdownFile);
+
+  // API Key Modal
+  btnOpenApiKeyModal.addEventListener("click", () => {
+    apiKeyModal.classList.remove("hidden");
+  });
+  btnCloseApiKeyModal.addEventListener("click", () => apiKeyModal.classList.add("hidden"));
+  btnCloseApiKeyModal2.addEventListener("click", () => apiKeyModal.classList.add("hidden"));
+
+  // Save Key buttons
+  document.querySelectorAll(".btn-save-key").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const agentId = btn.dataset.agent;
+      let inputVal = "";
+      if (agentId === "claude") inputVal = document.getElementById("inputKeyClaude").value.trim();
+      if (agentId === "gemini") inputVal = document.getElementById("inputKeyGemini").value.trim();
+      if (agentId === "gpt_code") inputVal = document.getElementById("inputKeyGpt").value.trim();
+      if (agentId === "grok") inputVal = document.getElementById("inputKeyGrok").value.trim();
+
+      if (!inputVal) {
+        alert("Vui lòng nhập chuỗi API key hợp lệ!");
+        return;
+      }
+
+      btn.textContent = "Đang lưu...";
+      try {
+        const res = await fetch("/api/eeat/save-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agent_id: agentId, api_key: inputVal })
+        });
+        if (res.ok) {
+          btn.textContent = "Đã lưu ✓";
+          apiKeySaveStatus.innerHTML = `<span style="color:#10b981;">✓ Đã lưu thành công key cho ${agentId}. Sẵn sàng gọi API trực tiếp!</span>`;
+          fetchAgentsStatus();
+          setTimeout(() => btn.textContent = "Lưu Key", 2500);
+        } else {
+          btn.textContent = "Lỗi!";
+        }
+      } catch (err) {
+        apiKeySaveStatus.innerHTML = `<span style="color:#f43f5e;">Lỗi kết nối server: ${err.message}</span>`;
+        btn.textContent = "Lưu Key";
+      }
+    });
+  });
 }
 
-function simulateAuditRun(url) {
-  auditSpinner.classList.remove("hidden");
-  btnRunAudit.querySelector(".btn-text").textContent = "Đang rà quét QRG...";
+async function executeAuditRequest({ url, content }) {
+  setLoadingState(true);
+  hideNotice();
 
-  setTimeout(() => {
-    auditSpinner.classList.add("hidden");
-    btnRunAudit.querySelector(".btn-text").textContent = "Bắt Đầu Audit";
-    currentAudit = JSON.parse(JSON.stringify(DEFAULT_AUDIT_DATA));
-    currentAudit.url = url;
+  const payload = {
+    url: url,
+    content: content,
+    agent_id: selectedAgent,
+    model: aiModelSelect.value,
+    temperature: parseFloat(aiTempSelect.value)
+  };
+
+  try {
+    const res = await fetch("/api/eeat/audit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.detail || `Lỗi HTTP ${res.status}`);
+    }
+
+    const auditData = await res.json();
+    currentAudit = auditData;
     renderAudit(currentAudit);
-  }, 900);
+
+    if (auditData.analyzed_by) {
+      const ab = auditData.analyzed_by;
+      if (ab.mode === "heuristic_rule_engine") {
+        showNotice("💡 " + (ab.message || "Phân tích bằng Heuristic Rule Engine (Chuẩn check_EEAT.md)."), "warning");
+      } else {
+        showNotice(`✓ Đã phân tích thành công bằng ${ab.agent_name || selectedAgent} (${ab.model}) theo thời gian thực.`, "success");
+      }
+    }
+  } catch (err) {
+    console.error("Lỗi khi gọi API EEAT Audit:", err);
+    // Fallback: nếu lỗi kết nối backend, dùng heuristic cục bộ
+    showNotice(`Không thể kết nối Backend API (/api/eeat/audit): ${err.message}. Đang áp dụng phân tích Heuristic Rule Engine cục bộ.`, "warning");
+    runLocalHeuristic(url, content);
+  } finally {
+    setLoadingState(false);
+  }
 }
 
-function analyzeCustomText(text) {
-  auditSpinner.classList.remove("hidden");
-  setTimeout(() => {
+function runLocalHeuristic(url, content) {
+  const text = content || targetUrlInput.value;
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const hasFieldExp = /máy ép|áp suất|nhiệt độ|xưởng|thợ bảo trì|bar/i.test(text);
+  const expScore = hasFieldExp ? 75 : 45;
+  const overall = hasFieldExp ? 68 : 58;
+
+  currentAudit = {
+    ...DEFAULT_AUDIT_DATA,
+    url: url || "Văn bản nhập (" + wordCount + " từ)",
+    overallScore: overall,
+    rating: overall >= 65 ? "MEDIUM+" : "MEDIUM",
+    analyzed_by: {
+      agent_id: selectedAgent,
+      agent_name: selectedAgent.toUpperCase(),
+      model: "local_heuristic",
+      mode: "local_rule_engine"
+    }
+  };
+  renderAudit(currentAudit);
+}
+
+function setLoadingState(isLoading) {
+  if (isLoading) {
+    auditSpinner.classList.remove("hidden");
+    auditSpinner2.classList.remove("hidden");
+    btnRunText.textContent = `Đang Phân Tích Với ${selectedAgent.toUpperCase()}...`;
+    btnRunAudit.disabled = true;
+    btnRunAuditText.disabled = true;
+  } else {
     auditSpinner.classList.add("hidden");
-    const wordCount = text.split(/\s+/).filter(Boolean).length;
-    
-    // Heuristic analysis
-    const hasFieldExp = /máy ép|áp suất|nhiệt độ|xưởng|thợ bảo trì|kinh nghiệm|bar|bồn/i.test(text);
-    const hasTds = /tds|iso|din|astm|cst|vi|điểm chớp cháy/i.test(text);
-    const hasComparison = /so sánh|đối chiếu|shell|mobil|castrol|thương hiệu/i.test(text);
-    const isTruncated = /\.\.\.$|chưa có|tiếp tục|đang cập nhật/i.test(text.slice(-150)) || wordCount < 400;
+    auditSpinner2.classList.add("hidden");
+    btnRunText.textContent = "Bắt Đầu Audit Bằng AI";
+    btnRunAudit.disabled = false;
+    btnRunAuditText.disabled = false;
+  }
+}
 
-    const expScore = hasFieldExp ? 75 : 40;
-    const expRating = hasFieldExp ? "HIGH-" : "MEDIUM-";
+function showNotice(text, type = "info") {
+  aiNoticeText.textContent = text;
+  aiNoticeIcon.textContent = type === "success" ? "✓" : type === "warning" ? "⚠️" : "🤖";
+  aiExecutionNotice.className = `action-alert-banner ${type === "success" ? "alert-success" : ""}`;
+  aiExecutionNotice.classList.remove("hidden");
+}
 
-    const specScore = hasTds ? 80 : 50;
-    const origScore = hasComparison ? 70 : 35;
-    const trustScore = isTruncated ? 45 : 75;
-
-    const overall = Math.round((expScore * 0.15) + (specScore * 0.2) + (origScore * 0.2) + (trustScore * 0.25) + 15);
-
-    currentAudit = {
-      ...DEFAULT_AUDIT_DATA,
-      url: "Văn bản tự nhập (" + wordCount + " từ)",
-      overallScore: Math.min(95, Math.max(30, overall)),
-      rating: overall >= 80 ? "HIGH" : overall >= 50 ? "MEDIUM" : "LOW",
-      summaryVerdict: `Bài viết dài <strong>${wordCount} từ</strong>. ` + 
-        (hasFieldExp ? "Có tín hiệu trải nghiệm thực tế. " : "Thiếu dẫn chứng xưởng máy thực địa. ") +
-        (isTruncated ? "Có dấu hiệu bị cụt hoặc thiếu chi tiết ở phần kết." : "Độ hoàn thiện văn bản khá tốt.")
-    };
-
-    renderAudit(currentAudit);
-  }, 800);
+function hideNotice() {
+  aiExecutionNotice.classList.add("hidden");
 }
 
 function renderAudit(data) {
-  // Update Hero Score
   overallScoreVal.textContent = data.overallScore;
   ratingBadge.textContent = data.rating;
   ratingBadge.className = `badge badge-${data.rating.toLowerCase().includes('high') ? 'high' : data.rating.toLowerCase().includes('low') ? 'low' : 'medium'}`;
 
-  // Update Gauge ring (stroke-dashoffset from 0 to 314.16)
+  // Gauge animation
   const offset = 314.16 * (1 - (data.overallScore / 100));
   gaugeProgress.style.strokeDashoffset = offset;
   gaugeProgress.style.stroke = data.overallScore >= 75 ? "var(--accent-emerald)" : data.overallScore >= 45 ? "var(--accent-amber)" : "var(--accent-rose)";
 
   scoreVerdict.innerHTML = data.summaryVerdict;
-  eeatSubScore.textContent = data.eeatScore;
-  mcSubScore.textContent = data.mcScore;
-  flawsCount.textContent = `${data.weaknesses.length} Lỗ hổng cốt lõi`;
-  weaknessBadgeCount.textContent = data.weaknesses.length;
+  eeatSubScore.textContent = data.eeatSubScore || "Medium (55%)";
+  mcSubScore.textContent = data.mcSubScore || "Medium (61%)";
+  flawsCount.textContent = `${(data.weaknesses || []).length} Lỗi cốt lõi`;
+  weaknessBadgeCount.textContent = (data.weaknesses || []).length;
 
-  // Render Bar Breakdown
-  renderDimensionsBars(data.dimensions);
+  if (data.analyzed_by) {
+    const ab = data.analyzed_by;
+    analyzedByBadge.textContent = `${ab.agent_name || selectedAgent} (${ab.model || ab.mode || 'AI'})`;
+  }
 
-  // Render Weaknesses List
-  renderWeaknesses(data.weaknesses);
-
-  // Render Dimension Cards
-  renderDimensionCards(data.dimensions);
-
-  // Render Prose Snippets
-  renderProseSnippets(data.proseSnippets);
-
-  // Render QA Items
-  renderQA(data.qaItems);
+  renderDimensionsBars(data.dimensions || []);
+  renderWeaknesses(data.weaknesses || []);
+  renderDimensionCards(data.dimensions || []);
+  renderProseSnippets(data.proseSnippets || []);
+  renderQA(data.qaItems || []);
 }
 
 function renderDimensionsBars(dimensions) {
@@ -397,7 +578,7 @@ function renderDimensionsBars(dimensions) {
     return `
       <div class="dim-bar-item" title="${dim.name} (${dim.weight}%)">
         <div class="dim-bar-header">
-          <span class="dim-name">${dim.icon} ${dim.name}</span>
+          <span class="dim-name">${dim.icon || '📌'} ${dim.name}</span>
           <span class="dim-score-badge" style="color: ${color}">${dim.score}% (${dim.rating})</span>
         </div>
         <div class="bar-track">
@@ -410,10 +591,10 @@ function renderDimensionsBars(dimensions) {
 
 function renderWeaknesses(weaknesses) {
   issuesListContainer.innerHTML = weaknesses.map((w, idx) => `
-    <div class="issue-card" id="${w.id}">
+    <div class="issue-card" id="${w.id || 'w' + idx}">
       <div class="issue-header">
         <div class="issue-title-wrap">
-          <span class="issue-priority priority-${w.priority}">${w.priority === 'high' ? 'Ưu tiên cao' : 'Trung bình'}</span>
+          <span class="issue-priority priority-${w.priority || 'high'}">${w.priority === 'high' ? 'Ưu tiên cao' : 'Trung bình'}</span>
           <h4 class="issue-title">#${idx + 1}. ${w.title}</h4>
         </div>
         <span class="issue-dimension-tag">${w.dimension}</span>
@@ -432,7 +613,7 @@ function renderWeaknesses(weaknesses) {
             <span>✓</span> Phương Án Khắc Phục (Actionable Fix)
           </div>
           <ul>
-            ${w.remedy.map(r => `<li>${r}</li>`).join("")}
+            ${(w.remedy || []).map(r => `<li>${r}</li>`).join("")}
           </ul>
         </div>
       </div>
@@ -446,7 +627,7 @@ function renderDimensionCards(dimensions) {
     return `
       <div class="dim-card">
         <div class="dim-card-top">
-          <h4 class="dim-card-title">${dim.icon} ${dim.name}</h4>
+          <h4 class="dim-card-title">${dim.icon || '📌'} ${dim.name}</h4>
           <span class="badge ${badgeClass}">${dim.rating} (${dim.score}%)</span>
         </div>
         <span class="dim-card-weight">Trọng số thuật toán: ${dim.weight}%</span>
@@ -462,7 +643,6 @@ function renderDimensionCards(dimensions) {
 
 function renderProseSnippets(snippets) {
   proseSnippetsContainer.innerHTML = snippets.map((sn, idx) => {
-    // Basic Markdown conversion for display
     const formatted = sn.content
       .replace(/### (.*)/g, '<h4 style="color:#93c5fd;margin-bottom:8px;">$1</h4>')
       .replace(/> (.*)/g, '<blockquote>$1</blockquote>')
@@ -537,28 +717,6 @@ function updateQAMetrics(items) {
       ${i.text.split(':')[0]}
     </li>
   `).join("");
-
-  // Recalculate dynamic overall score based on checked QA
-  const baseScore = 58;
-  const dynamicScore = Math.min(96, Math.round(baseScore + ((passed - 3) * 7.5)));
-  overallScoreVal.textContent = Math.max(baseScore, dynamicScore);
-  
-  if (dynamicScore >= 85) {
-    ratingBadge.textContent = "HIGH";
-    ratingBadge.className = "badge badge-high";
-    gaugeProgress.style.stroke = "var(--accent-emerald)";
-  } else if (dynamicScore >= 65) {
-    ratingBadge.textContent = "MEDIUM+";
-    ratingBadge.className = "badge badge-medium";
-    gaugeProgress.style.stroke = "var(--accent-amber)";
-  } else {
-    ratingBadge.textContent = "MEDIUM";
-    ratingBadge.className = "badge badge-medium";
-    gaugeProgress.style.stroke = "var(--accent-amber)";
-  }
-
-  const offset = 314.16 * (1 - (dynamicScore / 100));
-  gaugeProgress.style.strokeDashoffset = offset;
 }
 
 function openExportModal() {
@@ -568,41 +726,43 @@ function openExportModal() {
 }
 
 function generateMarkdownReport(data) {
+  const analyzedByStr = data.analyzed_by ? `${data.analyzed_by.agent_name || selectedAgent} (${data.analyzed_by.model || ''})` : selectedAgent;
   return `# BÁO CÁO KIỂM ĐỊNH CHẤT LƯỢNG NỘI DUNG & E-E-A-T
 **Trang kiểm tra:** ${data.url}
+**Được đánh giá bởi:** ${analyzedByStr}
 **Ngày thực hiện:** ${new Date().toLocaleDateString('vi-VN')}
 **Tổng điểm:** ${data.overallScore} / 100 (${data.rating})
 
 ---
 
 ## 1. TỔNG QUAN ĐÁNH GIÁ
-${data.summaryVerdict.replace(/<\/?[^>]+(>|$)/g, "")}
+${(data.summaryVerdict || "").replace(/<\/?[^>]+(>|$)/g, "")}
 
-- **Trụ cột E-E-A-T:** ${data.eeatScore}
-- **Trụ cột Chất lượng Nội dung (MC):** ${data.mcScore}
-- **Số lượng điểm yếu phát hiện:** ${data.weaknesses.length} mục
+- **Trụ cột E-E-A-T:** ${data.eeatSubScore || ''}
+- **Trụ cột Chất lượng Nội dung (MC):** ${data.mcSubScore || ''}
+- **Số lượng điểm yếu phát hiện:** ${(data.weaknesses || []).length} mục
 
 ---
 
 ## 2. BẢNG ĐIỂM 8 TIÊU CHÍ (QRG & QUICKCREATOR)
 | Tiêu chí | Trọng số | Điểm số | Xếp hạng | Đánh giá tóm tắt |
 |---|:---:|:---:|:---:|---|
-${data.dimensions.map(d => `| ${d.name} | ${d.weight}% | ${d.score}% | ${d.rating} | ${d.findings.slice(0, 100)}... |`).join("\n")}
+${(data.dimensions || []).map(d => `| ${d.name} | ${d.weight}% | ${d.score}% | ${d.rating} | ${(d.findings || '').slice(0, 100)}... |`).join("\n")}
 
 ---
 
 ## 3. CÁC ĐIỂM YẾU & PHƯƠNG ÁN KHẮC PHỤC (ACTIONABLE ROADMAP)
-${data.weaknesses.map((w, i) => `
+${(data.weaknesses || []).map((w, i) => `
 ### #${i + 1}. ${w.title} [${w.dimension}]
 - **Hiện trạng:** ${w.finding}
 - **Phương án Fix:**
-${w.remedy.map(r => `  - ${r}`).join("\n")}
+${(w.remedy || []).map(r => `  - ${r}`).join("\n")}
 `).join("\n")}
 
 ---
 
 ## 4. CHECKLIST BIÊN TẬP TRƯỚC KHI XUẤT BẢN
-${data.qaItems.map(q => `- [${q.checked ? 'x' : ' '}] ${q.text}`).join("\n")}
+${(data.qaItems || []).map(q => `- [${q.checked ? 'x' : ' '}] ${q.text}`).join("\n")}
 `;
 }
 

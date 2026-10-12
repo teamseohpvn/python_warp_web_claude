@@ -4,7 +4,7 @@ import asyncio
 import urllib.request
 import urllib.error
 from pathlib import Path
-from typing import Dict, Any, Optional, AsyncGenerator
+from typing import Dict, Any, Optional
 
 from app.config import BASE_DIR
 
@@ -80,6 +80,28 @@ DEFAULT_AGENTS_CONFIG = {
             "max_tokens": 8192,
             "temperature": 0.7,
             "system_prompt": "Bạn là chuyên gia lập trình và Technical SEO, chuyên xử lý mã nguồn, cấu trúc dữ liệu schema và thuật toán tìm kiếm."
+        },
+        "grok": {
+            "id": "grok",
+            "name": "Grok Agent",
+            "provider": "xai",
+            "badge": "xAI Grok",
+            "color": "#F3F4F6",
+            "icon": "⚫",
+            "description": "Suy luận sắc bén, nắm bắt dữ liệu thực tế và xu hướng mới nhất, tư duy phản biện thẳng thắn về chất lượng bài viết.",
+            "cli_command": "grok",
+            "api_key_env": "XAI_API_KEY",
+            "api_key": "",
+            "base_url": "https://api.x.ai/v1",
+            "default_model": "grok-2-latest",
+            "models": [
+                "grok-2-latest",
+                "grok-2-1212",
+                "grok-beta"
+            ],
+            "max_tokens": 8192,
+            "temperature": 0.7,
+            "system_prompt": "Bạn là chuyên gia phân tích chất lượng nội dung và E-E-A-T theo tiêu chuẩn Google QRG, đánh giá sắc sảo và thẳng thắn về điểm yếu bài viết."
         }
     }
 }
@@ -96,6 +118,21 @@ class AgentsManager:
         if not self.config_path.exists():
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(DEFAULT_AGENTS_CONFIG, f, indent=2, ensure_ascii=False)
+        else:
+            # Đảm bảo các agent mới như grok được thêm vào nếu file cũ chưa có
+            try:
+                cfg = self.load_config()
+                agents = cfg.get("agents", {})
+                updated = False
+                for def_id, def_data in DEFAULT_AGENTS_CONFIG["agents"].items():
+                    if def_id not in agents:
+                        agents[def_id] = def_data
+                        updated = True
+                if updated:
+                    cfg["agents"] = agents
+                    self.save_config(cfg)
+            except Exception as e:
+                print(f"[AgentsManager] Lỗi kiểm tra agent mặc định: {e}")
 
     def load_config(self) -> Dict[str, Any]:
         """Tải file cấu hình JSON"""
@@ -118,13 +155,19 @@ class AgentsManager:
             print(f"[AgentsManager] Lỗi lưu config: {e}")
             return False
 
-    def get_effective_key(self, agent_data: Dict[str, Any]) -> str:
-        """Lấy API key từ config hoặc biến môi trường"""
+    def get_effective_key(self, agent_data: Dict[str, Any], custom_key: Optional[str] = None) -> str:
+        """Lấy API key từ custom_key, config hoặc biến môi trường"""
+        if custom_key and custom_key.strip():
+            return custom_key.strip()
+        
         key = (agent_data.get("api_key") or "").strip()
         if not key:
             env_var = agent_data.get("api_key_env", "")
             if env_var:
                 key = (os.environ.get(env_var) or "").strip()
+            # Fallback cho Grok
+            if not key and agent_data.get("id") == "grok":
+                key = (os.environ.get("GROK_API_KEY") or "").strip()
         return key
 
     def get_public_agents_info(self) -> Dict[str, Any]:
@@ -185,7 +228,6 @@ class AgentsManager:
             return False
 
         agent_data = cfg["agents"][agent_id]
-        # Cho phép cập nhật các trường an toàn
         allowed_fields = [
             "api_key", "default_model", "temperature",
             "max_tokens", "system_prompt", "base_url"
@@ -202,36 +244,41 @@ class AgentsManager:
         prompt: str,
         model: Optional[str] = None,
         system_prompt: Optional[str] = None,
-        temperature: Optional[float] = None
+        temperature: Optional[float] = None,
+        custom_api_key: Optional[str] = None,
+        max_tokens_override: Optional[int] = None
     ) -> Dict[str, Any]:
-        """Chạy truy vấn tới Agent thông qua API trực tiếp hoặc CLI fallback"""
+        """Chạy truy vấn tới Agent thông qua API trực tiếp"""
         cfg = self.load_config()
         agents = cfg.get("agents", {})
         if agent_id not in agents:
-            return {"success": False, "error": f"Agent '{agent_id}' không tồn tại"}
+            return {"success": False, "error": f"Agent '{agent_id}' không tồn tại trong cấu hình"}
 
         agent = agents[agent_id]
-        key = self.get_effective_key(agent)
+        key = self.get_effective_key(agent, custom_api_key)
         provider = agent.get("provider", agent_id)
         active_model = model or agent.get("default_model")
         active_sys_prompt = system_prompt or agent.get("system_prompt", "")
         active_temp = temperature if temperature is not None else agent.get("temperature", 0.7)
-        max_tokens = agent.get("max_tokens", 4096)
+        max_tokens = max_tokens_override or agent.get("max_tokens", 4096)
 
-        # Chạy trong background thread để không block async loop
         loop = asyncio.get_event_loop()
         try:
-            if provider == "anthropic":
+            if provider == "anthropic" or agent_id == "claude":
                 res = await loop.run_in_executor(
                     None, self._call_anthropic, key, active_model, prompt, active_sys_prompt, active_temp, max_tokens
                 )
-            elif provider == "google":
+            elif provider == "google" or agent_id == "gemini":
                 res = await loop.run_in_executor(
                     None, self._call_gemini, key, active_model, prompt, active_sys_prompt, active_temp, max_tokens
                 )
-            elif provider == "openai":
+            elif provider == "openai" or agent_id == "gpt_code" or agent_id == "gpt":
                 res = await loop.run_in_executor(
                     None, self._call_openai, key, active_model, prompt, active_sys_prompt, active_temp, max_tokens
+                )
+            elif provider == "xai" or agent_id == "grok":
+                res = await loop.run_in_executor(
+                    None, self._call_grok, key, active_model, prompt, active_sys_prompt, active_temp, max_tokens
                 )
             else:
                 return {"success": False, "error": f"Nhà cung cấp '{provider}' chưa được hỗ trợ"}
@@ -370,7 +417,7 @@ class AgentsManager:
         temperature: float,
         max_tokens: int
     ) -> Dict[str, Any]:
-        """Gọi OpenAI GPT Code chat completions API"""
+        """Gọi OpenAI GPT chat completions API"""
         if not api_key:
             return {
                 "success": False,
@@ -423,6 +470,69 @@ class AgentsManager:
             return {"success": False, "error": f"OpenAI HTTP {e.code}: {err_msg}"}
         except Exception as e:
             return {"success": False, "error": f"OpenAI Error: {str(e)}"}
+
+    def _call_grok(
+        self,
+        api_key: str,
+        model: str,
+        prompt: str,
+        system_prompt: str,
+        temperature: float,
+        max_tokens: int
+    ) -> Dict[str, Any]:
+        """Gọi xAI Grok API (OpenAI compatible)"""
+        if not api_key:
+            return {
+                "success": False,
+                "error": "Thiếu XAI_API_KEY / GROK_API_KEY. Vui lòng cấu hình API key trong mục Thiết Lập Agent hoặc biến môi trường."
+            }
+
+        url = "https://api.x.ai/v1/chat/completions"
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+
+        req_data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=req_data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            },
+            method="POST"
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=120) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                choices = res_json.get("choices", [])
+                if not choices:
+                    return {"success": False, "error": "Grok không trả về kết quả nào."}
+
+                text_content = choices[0].get("message", {}).get("content", "")
+                usage = res_json.get("usage", {})
+                return {
+                    "success": True,
+                    "agent": "grok",
+                    "model": model,
+                    "response": text_content,
+                    "usage": usage
+                }
+        except urllib.error.HTTPError as e:
+            err_msg = e.read().decode("utf-8", errors="replace")
+            return {"success": False, "error": f"xAI Grok HTTP {e.code}: {err_msg}"}
+        except Exception as e:
+            return {"success": False, "error": f"xAI Grok Error: {str(e)}"}
 
 
 # Khởi tạo singleton instance

@@ -30,15 +30,17 @@
    - Cơ chế giới hạn: **Tối đa 10 lần thử trong 60 giây**. Tự động khóa và hiển thị đồng hồ đếm ngược nếu vượt quá số lần cho phép.
    - Phiên làm việc duy trì an toàn qua `HttpOnly Cookie`.
 
-6. **🎯 EEAT Audit Studio GUI Tích Hợp Trực Tiếp**:
-   - Menu trực tiếp trên thanh điều hướng sau đăng nhập.
-   - Xem và tương tác toàn diện với bảng điều khiển kiểm định chất lượng nội dung B2B & Google Search Quality Rater Guidelines (QRG).
-   - Hỗ trợ tải lại hoặc mở trong tab trình duyệt độc lập.
+6. **🎯 EEAT Audit Studio & AI Backend Engine Tích Hợp Sẵn**:
+   - Menu trực tiếp trên thanh điều hướng sau đăng nhập: **`🎯 EEAT Quality Audit`**.
+   - Hỗ trợ cào dữ liệu tự động từ URL hoặc dán nội dung văn bản / Markdown.
+   - **Backend Engine (`app/eeat_engine.py`)** tích hợp API trực tiếp gọi 4 AI Agents: **Claude** (Anthropic), **Gemini** (Google), **GPT-4o** (OpenAI), và **Grok** (xAI).
+   - Tự động thẩm định theo ma trận 8 tiêu chí chuẩn Google QRG 2026 & QuickCreator Model: Experience, Expertise, Authoritativeness, Trust, Effort, Originality, Talent/Skill, Accuracy.
+   - Phát hiện các lỗ hổng cốt lõi và tự động sinh các đoạn văn mẫu khắc phục đạt chuẩn 4 nhịp.
 
-7. **🤖 Hệ Thống Multi-Agent Đa Trí Tuệ (Claude / Gemini / GPT Code)**:
-   - File cấu hình máy chủ: `config/agents_config.json`.
-   - Lựa chọn linh hoạt giữa **Claude** (Anthropic), **Gemini** (Google), và **GPT Code** (OpenAI).
-   - Thiết lập trực tiếp API Key, Model, Nhiệt độ (Temperature), Max Tokens và System Prompt ngay trên giao diện Web UI hoặc qua file cấu hình.
+7. **🤖 Hệ Thống Multi-Agent Đa Trí Tuệ (Claude / Gemini / GPT / Grok)**:
+   - File cấu hình: `config/agents_config.json`.
+   - Hỗ trợ 4 nhà cung cấp hàng đầu: **Anthropic (Claude 3.7 / 3.5)**, **Google (Gemini 2.5 / 2.0)**, **OpenAI (GPT-4o / o3-mini)**, và **xAI (Grok 2 / Grok 3)**.
+   - Thiết lập trực tiếp API Key, Model, Nhiệt độ (Temperature) ngay trên giao diện Web UI hoặc biến môi trường (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`).
    - Sân chơi (Playground) chạy prompt trực tiếp, hỗ trợ mẫu câu lệnh E-E-A-T, Content Brief và Code Audit.
 
 ---
@@ -49,14 +51,17 @@
 python_warp_web_claude/
 ├── app/
 │   ├── main.py             # FastAPI REST endpoints, SSE task streaming & WebSockets
+│   ├── eeat_engine.py      # Engine kiểm định E-E-A-T & kết nối AI Agents (Claude, Gemini, GPT, Grok)
+│   ├── agents_manager.py   # Quản lý cấu hình & thực thi các AI Agents (Anthropic, Google, OpenAI, xAI)
 │   ├── auth.py             # Module xác thực mật khẩu & Rate Limiter chống Brute-Force
 │   ├── config.py           # Cấu hình danh mục dự án, presets, cổng mạng và mật khẩu
 │   ├── task_runner.py      # Async Process Runner stream output qua SSE
 │   ├── pty_manager.py      # Cầu nối PTY (Pseudo-Terminal) kết nối với xterm.js
 │   ├── log_manager.py      # Quản lý đọc, tải và xóa file log In/Out
 │   └── reports_manager.py  # Quét và hiển thị các file báo cáo Markdown/HTML
+├── eeat_app/               # Giao diện Web Studio kiểm định E-E-A-T (HTML, CSS, JS)
 ├── templates/
-│   └── index.html          # Giao diện Single Page Application
+│   └── index.html          # Giao diện Single Page Application (Hub Console)
 ├── static/
 │   ├── styles.css          # Giao diện Cyber-Terracotta Dark Mode cao cấp
 │   ├── app.js             # Logic Frontend, WebSocket & SSE streaming

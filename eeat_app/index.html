@@ -16,21 +16,21 @@
       <div class="header-left">
         <div class="brand-badge">
           <div class="brand-pulse"></div>
-          <span class="brand-version">v1.2 PRO</span>
+          <span class="brand-version">v2.0 MULTI-AGENT</span>
         </div>
         <div class="brand-title-wrap">
           <h1>E-E-A-T & Quality Audit Studio</h1>
-          <p class="subtitle">Engine phân tích chất lượng nội dung B2B & Google Search Quality Rater Guidelines</p>
+          <p class="subtitle">Engine phân tích chất lượng bài viết B2B qua API Claude, Gemini, GPT & Grok</p>
         </div>
       </div>
       <div class="header-right">
-        <a href="/" target="_top" class="btn btn-ghost" title="Quay về Claude & Multi-Agent Hub">
+        <button id="btnOpenApiKeyModal" class="btn btn-secondary" title="Thiết lập API Keys cho Claude, Gemini, GPT, Grok">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          ⚙️ Cấu Hình API Key
+        </button>
+        <a href="/" target="_top" class="btn btn-ghost" title="Quay về Claude Studio Hub">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-          Hub Trang Chủ
-        </a>
-        <a href="../check_EEAT.md" target="_blank" class="btn btn-ghost">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-          Bộ Quy Chuẩn (check_EEAT.md)
+          Trang Chủ Hub
         </a>
         <button id="btnExportMd" class="btn btn-outline">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
@@ -39,16 +39,61 @@
       </div>
     </header>
 
+    <!-- AI Agent Selector Bar -->
+    <section class="ai-agent-control-bar card">
+      <div class="ai-bar-left">
+        <span class="control-label">🤖 Chọn AI Engine Kiểm Định:</span>
+        <div class="ai-agent-pills" id="aiAgentPills">
+          <button class="agent-pill active" data-agent="claude">
+            <span class="agent-pill-icon">🟣</span>
+            <span class="agent-pill-name">Claude</span>
+            <span class="key-status-dot" id="dot-claude" title="Trạng thái API Key"></span>
+          </button>
+          <button class="agent-pill" data-agent="gemini">
+            <span class="agent-pill-icon">🔵</span>
+            <span class="agent-pill-name">Gemini</span>
+            <span class="key-status-dot" id="dot-gemini" title="Trạng thái API Key"></span>
+          </button>
+          <button class="agent-pill" data-agent="gpt_code">
+            <span class="agent-pill-icon">🟢</span>
+            <span class="agent-pill-name">GPT-4o</span>
+            <span class="key-status-dot" id="dot-gpt_code" title="Trạng thái API Key"></span>
+          </button>
+          <button class="agent-pill" data-agent="grok">
+            <span class="agent-pill-icon">⚫</span>
+            <span class="agent-pill-name">Grok (xAI)</span>
+            <span class="key-status-dot" id="dot-grok" title="Trạng thái API Key"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="ai-bar-right">
+        <div class="model-select-group">
+          <label for="aiModelSelect" class="sub-label">Model:</label>
+          <select id="aiModelSelect" class="form-select-sm">
+            <!-- Populated via JS -->
+          </select>
+        </div>
+        <div class="temp-select-group">
+          <label for="aiTempSelect" class="sub-label">Chế độ:</label>
+          <select id="aiTempSelect" class="form-select-sm">
+            <option value="0.2" selected>Khắt khe (Strict 0.2)</option>
+            <option value="0.5">Tiêu chuẩn (0.5)</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
     <!-- Audit Input Control Bar -->
     <section class="audit-input-section card">
       <div class="input-tabs">
         <button class="tab-btn active" data-tab="url-mode">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-          Kiểm tra qua URL
+          Kiểm tra qua URL (Tự động cào dữ liệu)
         </button>
         <button class="tab-btn" data-tab="content-mode">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
-          Dán nội dung văn bản
+          Dán nội dung văn bản / Markdown
         </button>
       </div>
 
@@ -58,12 +103,12 @@
             <span class="input-icon">🔗</span>
             <input type="text" id="targetUrlInput" placeholder="Nhập đường dẫn trang web (https://...)" value="https://daucongnghiephp.com.vn/dau-thuy-luc/eneos-super-hyrando-68">
           </div>
-          <button id="btnLoadPreset" class="btn btn-secondary" title="Nạp nhanh kết quả kiểm tra mẫu ENEOS 68">
-            ⚡ Mẫu: ENEOS Super Hyrando 68
+          <button id="btnLoadPreset" class="btn btn-secondary" title="Nạp nhanh mẫu kiểm tra ENEOS 68">
+            ⚡ Mẫu: ENEOS 68
           </button>
           <button id="btnRunAudit" class="btn btn-primary pulse-btn">
             <span class="btn-spinner hidden" id="auditSpinner"></span>
-            <span class="btn-text">Bắt Đầu Audit</span>
+            <span class="btn-text" id="btnRunText">Bắt Đầu Audit Bằng AI</span>
           </button>
         </div>
       </div>
@@ -73,11 +118,20 @@
           <textarea id="textContentInput" rows="5" placeholder="Dán toàn bộ văn bản hoặc mã Markdown của bài viết cần kiểm tra vào đây..."></textarea>
           <div class="textarea-footer">
             <span id="charCount">0 từ</span>
-            <button id="btnRunAuditText" class="btn btn-primary">Phân Tích Nội Dung Này</button>
+            <button id="btnRunAuditText" class="btn btn-primary">
+              <span class="btn-spinner hidden" id="auditSpinner2"></span>
+              <span>Phân Tích Nội Dung Này</span>
+            </button>
           </div>
         </div>
       </div>
     </section>
+
+    <!-- Notification / Status Banner -->
+    <div id="aiExecutionNotice" class="action-alert-banner hidden">
+      <div class="alert-icon" id="aiNoticeIcon">🤖</div>
+      <div class="alert-content" id="aiNoticeText"></div>
+    </div>
 
     <!-- Main Dashboard Area -->
     <main class="dashboard-grid">
@@ -119,6 +173,10 @@
             <div class="pill">
               <span class="pill-label">Lỗ Hổng Cần Fix</span>
               <span class="pill-value text-danger" id="flawsCount">5 Lỗi cốt lõi</span>
+            </div>
+            <div class="pill">
+              <span class="pill-label">Được Đánh Giá Bởi</span>
+              <span class="pill-value text-cyan" id="analyzedByBadge">🟣 Claude 3.7</span>
             </div>
           </div>
         </div>
@@ -178,7 +236,7 @@
           <div class="action-alert-banner">
             <div class="alert-icon">💡</div>
             <div class="alert-content">
-              <strong>Phát hiện từ kiểm tra:</strong> Trang web sao chép số liệu TDS rất chuẩn nhưng mắc 2 điểm yếu chí mạng khiến Google chỉ xếp hạng <em>Medium</em>: <u>Nội dung bị cắt cụt giữa chừng</u> và <u>thiếu hoàn toàn trải nghiệm thực tế tại xưởng máy</u>. Dưới đây là lộ trình khắc phục từng điểm:
+              <strong>Phát hiện từ kiểm tra:</strong> Trang web sao chép số liệu TDS rất chuẩn nhưng mắc các điểm yếu cốt lõi khiến Google xếp hạng <em>Medium</em>: <u>Nội dung bị cắt cụt giữa chừng</u> và <u>thiếu trải nghiệm thực tế tại xưởng máy</u>. Dưới đây là lộ trình khắc phục từng điểm:
             </div>
           </div>
 
@@ -198,7 +256,7 @@
         <div class="view-panel" id="remediation-generator-view">
           <div class="prose-generator-intro card mb-4">
             <div class="section-title-wrap">
-              <h3>Đoạn Văn Mẫu Khắc Phục Triệt Để 5 Lỗ Hổng</h3>
+              <h3>Đoạn Văn Mẫu Khắc Phục Triệt Để Các Lỗ Hổng</h3>
               <p class="text-muted text-sm">Các đoạn văn bản kỹ thuật được thiết kế chuẩn cấu trúc 4 nhịp (Ý kiến người thật -> Lời khuyên nhà phân phối -> Căn cứ TDS -> Kêu gọi hành động) để dán trực tiếp vào bài viết:</p>
             </div>
           </div>
@@ -213,7 +271,7 @@
           <div class="card qa-audit-card">
             <div class="section-title-wrap">
               <h3>Checklist Kiểm Duyệt Biên Tập (Editorial QA Checklist)</h3>
-              <p class="text-muted text-sm">Tích chọn các hạng mục đã hoàn thiện để nâng điểm bài viết từ 58 (Medium) lên 90+ (High / Top 1 SERP):</p>
+              <p class="text-muted text-sm">Tích chọn các hạng mục đã hoàn thiện để nâng điểm bài viết từ Medium lên 90+ (High / Top 1 SERP):</p>
             </div>
             
             <div class="interactive-checklist" id="interactiveChecklist">
@@ -223,6 +281,74 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- API Key Settings Modal -->
+  <div class="modal-backdrop hidden" id="apiKeyModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>⚙️ Cấu Hình API Key Cho 4 AI Agents</h3>
+        <button class="modal-close-btn" id="btnCloseApiKeyModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-sm text-muted mb-4">Nhập API Key để hệ thống kết nối trực tiếp phân tích bài viết qua Claude, Gemini, GPT hoặc Grok. API Key được mã hóa và lưu tại <code>config/agents_config.json</code> trên server.</p>
+        
+        <div class="api-key-form-list">
+          <div class="api-key-row">
+            <div class="api-key-label-wrap">
+              <span class="agent-icon">🟣</span>
+              <strong>Anthropic Claude</strong>
+              <span class="text-xs text-muted">(ANTHROPIC_API_KEY)</span>
+            </div>
+            <div class="api-input-wrap">
+              <input type="password" id="inputKeyClaude" placeholder="sk-ant-api..." class="api-input">
+              <button class="btn btn-xs btn-outline btn-save-key" data-agent="claude">Lưu Key</button>
+            </div>
+          </div>
+
+          <div class="api-key-row">
+            <div class="api-key-label-wrap">
+              <span class="agent-icon">🔵</span>
+              <strong>Google Gemini</strong>
+              <span class="text-xs text-muted">(GEMINI_API_KEY)</span>
+            </div>
+            <div class="api-input-wrap">
+              <input type="password" id="inputKeyGemini" placeholder="AIzaSy..." class="api-input">
+              <button class="btn btn-xs btn-outline btn-save-key" data-agent="gemini">Lưu Key</button>
+            </div>
+          </div>
+
+          <div class="api-key-row">
+            <div class="api-key-label-wrap">
+              <span class="agent-icon">🟢</span>
+              <strong>OpenAI GPT</strong>
+              <span class="text-xs text-muted">(OPENAI_API_KEY)</span>
+            </div>
+            <div class="api-input-wrap">
+              <input type="password" id="inputKeyGpt" placeholder="sk-proj-..." class="api-input">
+              <button class="btn btn-xs btn-outline btn-save-key" data-agent="gpt_code">Lưu Key</button>
+            </div>
+          </div>
+
+          <div class="api-key-row">
+            <div class="api-key-label-wrap">
+              <span class="agent-icon">⚫</span>
+              <strong>xAI Grok</strong>
+              <span class="text-xs text-muted">(XAI_API_KEY)</span>
+            </div>
+            <div class="api-input-wrap">
+              <input type="password" id="inputKeyGrok" placeholder="xai-..." class="api-input">
+              <button class="btn btn-xs btn-outline btn-save-key" data-agent="grok">Lưu Key</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="apiKeySaveStatus" class="mt-4 text-xs text-muted"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnCloseApiKeyModal2" class="btn btn-primary">Xong</button>
+      </div>
+    </div>
   </div>
 
   <!-- Export Report Modal -->

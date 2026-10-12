@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Optional, Dict, Any
 from fastapi import FastAPI, WebSocket, Query, HTTPException, Request, Response, Depends, status
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +22,7 @@ from app.pty_manager import handle_pty_websocket
 from app.log_manager import LogManager
 from app.reports_manager import ReportsManager
 from app.agents_manager import agents_manager
+from app.eeat_engine import eeat_engine, get_master_rule_text
 
 app = FastAPI(title="Claude SEO & Blog Web Console", version="1.0.0")
 
@@ -66,6 +68,18 @@ class RunAgentRequest(BaseModel):
     model: Optional[str] = None
     system_prompt: Optional[str] = None
     temperature: Optional[float] = None
+
+class EEATAuditRequest(BaseModel):
+    content: Optional[str] = None
+    url: Optional[str] = None
+    agent_id: Optional[str] = "claude"
+    model: Optional[str] = None
+    temperature: Optional[float] = 0.2
+    custom_api_key: Optional[str] = None
+
+class SaveApiKeyRequest(BaseModel):
+    agent_id: str
+    api_key: str
 
 # --- Authentication Endpoints ---
 
@@ -247,7 +261,7 @@ async def get_report_content(path: str = Query(...)):
         raise HTTPException(status_code=400, detail=res["error"])
     return res
 
-# --- Multi-Agent API Endpoints (Claude, Gemini, GPT Code) ---
+# --- Multi-Agent API Endpoints (Claude, Gemini, GPT Code, Grok) ---
 
 @app.get("/api/agents", dependencies=[Depends(require_auth)])
 async def get_agents():
@@ -282,3 +296,38 @@ async def run_agent(req: RunAgentRequest):
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Lỗi thực thi Agent"))
     return result
+
+# --- EEAT Content Quality Audit Endpoints ---
+
+@app.get("/api/eeat/agents", dependencies=[Depends(require_auth)])
+async def get_eeat_agents():
+    """Lấy danh sách 4 AI Agents hỗ trợ cho EEAT Audit (Claude, Gemini, GPT, Grok)"""
+    return agents_manager.get_public_agents_info()
+
+@app.post("/api/eeat/audit", dependencies=[Depends(require_auth)])
+async def audit_eeat_content(req: EEATAuditRequest):
+    """Phân tích và chấm điểm bài viết theo bộ quy chuẩn check_EEAT.md sử dụng AI Agent"""
+    res = await eeat_engine.audit_content(
+        content=req.content,
+        url=req.url,
+        agent_id=req.agent_id or "claude",
+        model=req.model,
+        temperature=req.temperature if req.temperature is not None else 0.2,
+        custom_api_key=req.custom_api_key
+    )
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Lỗi kiểm định bài viết"))
+    return res["data"]
+
+@app.post("/api/eeat/save-key", dependencies=[Depends(require_auth)])
+async def save_eeat_key(req: SaveApiKeyRequest):
+    """Lưu API key cho một AI Agent"""
+    success = agents_manager.update_agent_config(req.agent_id, {"api_key": req.api_key})
+    if not success:
+        raise HTTPException(status_code=400, detail="Không thể lưu API Key cho agent này")
+    return {"success": True, "agent_id": req.agent_id}
+
+@app.get("/api/eeat/rule", dependencies=[Depends(require_auth)])
+async def get_eeat_rule():
+    """Lấy toàn văn bản quy chuẩn check_EEAT.md"""
+    return {"rule": get_master_rule_text()}
