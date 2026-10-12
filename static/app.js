@@ -1392,6 +1392,9 @@ function updateActiveAgentRunnerUI() {
       if (m === agent.default_model) opt.selected = true;
       modelSelect.appendChild(opt);
     });
+    modelSelect.onchange = () => {
+      if (modelDisplay) modelDisplay.textContent = modelSelect.value;
+    };
   }
 }
 

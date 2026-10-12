@@ -215,26 +215,40 @@ Phuy thép 200L ENEOS chính hãng từ nhà máy Đình Vũ (Hải Phòng) luô
 // Model mapping for quick population
 const AGENT_MODELS = {
   "claude": [
-    { value: "claude-3-7-sonnet-20250219", label: "claude-3-7-sonnet (Mạnh nhất & sâu sắc)" },
-    { value: "claude-3-5-sonnet-20241022", label: "claude-3-5-sonnet (Cân bằng & sắc nét)" },
-    { value: "claude-3-5-haiku-20241022", label: "claude-3-5-haiku (Tốc độ cao)" }
+    { value: "claude-3-7-sonnet-20250219", label: "claude-3-7-sonnet (Flagship 3.7 Sonnet - Mới nhất)" },
+    { value: "claude-3-5-sonnet-20241022", label: "claude-3-5-sonnet (Sonnet v2 - Chuẩn E-E-A-T)" },
+    { value: "claude-3-5-haiku-20241022", label: "claude-3-5-haiku (Haiku - Siêu tốc độ)" },
+    { value: "claude-3-opus-20240229", label: "claude-3-opus (Opus - Chuyên sâu phức tạp)" }
   ],
   "gemini": [
-    { value: "gemini-2.5-flash", label: "gemini-2.5-flash (Cực nhanh & chuẩn)" },
-    { value: "gemini-2.5-pro", label: "gemini-2.5-pro (Ngữ cảnh sâu 1M)" },
-    { value: "gemini-2.0-flash", label: "gemini-2.0-flash" }
+    { value: "gemini-3.8-flash", label: "gemini-3.8-flash (Gemini 3.8 Flash - Siêu tốc & Mới nhất)" },
+    { value: "gemini-3.5-flash", label: "gemini-3.5-flash (Gemini 3.5 Flash - Trí tuệ cận Pro)" },
+    { value: "gemini-3.1-pro-preview", label: "gemini-3.1-pro (Gemini 3.1 Pro - Suy luận đa phương thức)" },
+    { value: "gemini-2.5-pro", label: "gemini-2.5-pro (2.5 Pro - Suy luận sâu sắc, 1M context)" },
+    { value: "gemini-2.5-flash", label: "gemini-2.5-flash (2.5 Flash - Nhanh & chuẩn xác)" },
+    { value: "gemini-2.0-flash", label: "gemini-2.0-flash (2.0 Flash GA)" },
+    { value: "gemini-1.5-pro", label: "gemini-1.5-pro (Ngữ cảnh 2M tokens)" }
   ],
   "gpt_code": [
-    { value: "gpt-4o", label: "gpt-4o (Logic & Schema chuẩn)" },
-    { value: "gpt-4o-mini", label: "gpt-4o-mini (Tiết kiệm)" },
-    { value: "o3-mini", label: "o3-mini (Suy luận chuyên sâu)" }
+    { value: "o3", label: "o3 (OpenAI o3 - Reasoning Flagship Mới Nhất)" },
+    { value: "o3-mini", label: "o3-mini (Reasoning Logic & Code Chuyên Sâu)" },
+    { value: "o1", label: "o1 (OpenAI o1 Reasoning Flagship)" },
+    { value: "gpt-4.5-preview", label: "gpt-4.5-preview (GPT-4.5 Flagship - Siêu kiến thức)" },
+    { value: "gpt-4o", label: "gpt-4o (GPT-4o Omni - Cân bằng đa năng)" },
+    { value: "chatgpt-4o-latest", label: "chatgpt-4o-latest (Dynamic Latest)" },
+    { value: "gpt-4o-mini", label: "gpt-4o-mini (Mini - Nhanh & Tiết kiệm)" },
+    { value: "o1-mini", label: "o1-mini (Reasoning Tiết Kiệm)" }
   ],
   "grok": [
-    { value: "grok-2-latest", label: "grok-2-latest (xAI Phản biện sắc bén)" },
+    { value: "grok-4", label: "grok-4 (xAI Grok 4 - Frontier Flagship Mới Nhất)" },
+    { value: "grok-3", label: "grok-3 (xAI Grok 3 - Flagship thế hệ 3)" },
+    { value: "grok-3-mini", label: "grok-3-mini (Grok 3 Mini - Nhanh & sắc bén)" },
+    { value: "grok-2-latest", label: "grok-2-latest (Grok 2 Phản biện sắc bén)" },
     { value: "grok-2-1212", label: "grok-2-1212" },
     { value: "grok-beta", label: "grok-beta" }
   ]
 };
+
 
 // State
 let selectedAgent = "claude";

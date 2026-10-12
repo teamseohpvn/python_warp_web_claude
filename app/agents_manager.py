@@ -29,7 +29,8 @@ DEFAULT_AGENTS_CONFIG = {
             "models": [
                 "claude-3-7-sonnet-20250219",
                 "claude-3-5-sonnet-20241022",
-                "claude-3-5-haiku-20241022"
+                "claude-3-5-haiku-20241022",
+                "claude-3-opus-20240229"
             ],
             "max_tokens": 8192,
             "temperature": 0.7,
@@ -47,8 +48,11 @@ DEFAULT_AGENTS_CONFIG = {
             "api_key_env": "GEMINI_API_KEY",
             "api_key": "",
             "base_url": "https://generativelanguage.googleapis.com/v1beta",
-            "default_model": "gemini-2.5-flash",
+            "default_model": "gemini-3.8-flash",
             "models": [
+                "gemini-3.8-flash",
+                "gemini-3.5-flash",
+                "gemini-3.1-pro-preview",
                 "gemini-2.5-pro",
                 "gemini-2.5-flash",
                 "gemini-2.0-flash",
@@ -72,10 +76,14 @@ DEFAULT_AGENTS_CONFIG = {
             "base_url": "https://api.openai.com/v1",
             "default_model": "gpt-4o",
             "models": [
-                "gpt-4o",
-                "gpt-4o-mini",
+                "o3",
                 "o3-mini",
-                "gpt-4-turbo"
+                "o1",
+                "gpt-4.5-preview",
+                "gpt-4o",
+                "chatgpt-4o-latest",
+                "gpt-4o-mini",
+                "o1-mini"
             ],
             "max_tokens": 8192,
             "temperature": 0.7,
@@ -93,8 +101,11 @@ DEFAULT_AGENTS_CONFIG = {
             "api_key_env": "XAI_API_KEY",
             "api_key": "",
             "base_url": "https://api.x.ai/v1",
-            "default_model": "grok-2-latest",
+            "default_model": "grok-4",
             "models": [
+                "grok-4",
+                "grok-3",
+                "grok-3-mini",
                 "grok-2-latest",
                 "grok-2-1212",
                 "grok-beta"
@@ -113,13 +124,12 @@ class AgentsManager:
         self._ensure_config()
 
     def _ensure_config(self):
-        """Đảm bảo file cấu hình tồn tại"""
+        """Đảm bảo file cấu hình tồn tại và đồng bộ các model mới nhất"""
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.config_path.exists():
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(DEFAULT_AGENTS_CONFIG, f, indent=2, ensure_ascii=False)
         else:
-            # Đảm bảo các agent mới như grok được thêm vào nếu file cũ chưa có
             try:
                 cfg = self.load_config()
                 agents = cfg.get("agents", {})
@@ -128,6 +138,24 @@ class AgentsManager:
                     if def_id not in agents:
                         agents[def_id] = def_data
                         updated = True
+                    else:
+                        existing_agent = agents[def_id]
+                        cur_models = existing_agent.get("models", [])
+                        new_models = def_data.get("models", [])
+                        # Đồng bộ danh sách models mới mà không làm mất model tùy chỉnh của user
+                        merged_models = []
+                        for m in new_models:
+                            if m not in merged_models:
+                                merged_models.append(m)
+                        for m in cur_models:
+                            if m not in merged_models:
+                                merged_models.append(m)
+                        if merged_models != cur_models:
+                            existing_agent["models"] = merged_models
+                            updated = True
+                        if def_data.get("default_model") and existing_agent.get("default_model") not in merged_models:
+                            existing_agent["default_model"] = def_data["default_model"]
+                            updated = True
                 if updated:
                     cfg["agents"] = agents
                     self.save_config(cfg)
@@ -362,7 +390,8 @@ class AgentsManager:
                 "error": "Thiếu GEMINI_API_KEY. Vui lòng cấu hình API key trong mục Thiết Lập Agent hoặc biến môi trường."
             }
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        clean_model = model.replace("models/", "").strip() if model else "gemini-3.8-flash"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
         contents = [{"parts": [{"text": prompt}]}]
         payload: Dict[str, Any] = {
             "contents": contents,
@@ -390,10 +419,14 @@ class AgentsManager:
                 res_json = json.loads(res_body)
                 candidates = res_json.get("candidates", [])
                 if not candidates:
+                    prompt_feedback = res_json.get("promptFeedback", {})
+                    block_reason = prompt_feedback.get("blockReason")
+                    if block_reason:
+                        return {"success": False, "error": f"Gemini bị chặn bởi bộ lọc an toàn: {block_reason}"}
                     return {"success": False, "error": "Gemini không trả về kết quả nào."}
                 
                 parts = candidates[0].get("content", {}).get("parts", [])
-                text_content = "".join([p.get("text", "") for p in parts])
+                text_content = "".join([p.get("text", "") for p in parts if "text" in p])
                 usage = res_json.get("usageMetadata", {})
                 return {
                     "success": True,
@@ -425,17 +458,23 @@ class AgentsManager:
             }
 
         url = "https://api.openai.com/v1/chat/completions"
+        is_reasoning_model = any(model.startswith(prefix) for prefix in ["o1", "o3", "o4"])
+        role_name = "developer" if is_reasoning_model else "system"
         messages = []
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": role_name, "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
         payload = {
             "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens
+            "messages": messages
         }
+        if is_reasoning_model:
+            payload["max_completion_tokens"] = max_tokens
+        else:
+            payload["temperature"] = temperature
+            payload["max_tokens"] = max_tokens
+
 
         req_data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
