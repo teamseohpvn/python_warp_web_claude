@@ -1,14 +1,24 @@
 import os
-import pty
-import fcntl
-import termios
 import struct
 import asyncio
 import uuid
+import sys
 from datetime import datetime
 from typing import Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from app.config import SESSION_LOG_DIR, AUDIT_LOG_DIR
+
+# Kiểm tra hỗ trợ PTY (chỉ có trên Unix/Linux)
+try:
+    import pty
+    import fcntl
+    import termios
+    HAS_PTY = True
+except ImportError:
+    pty = None
+    fcntl = None
+    termios = None
+    HAS_PTY = False
 
 class PtySession:
     def __init__(self, session_id: str, cwd: str = "/root"):
@@ -20,10 +30,15 @@ class PtySession:
         self.audit_log_path = AUDIT_LOG_DIR / f"audit_{timestamp_str}_{session_id[:8]}.log"
         self.master_fd: Optional[int] = None
         self.pid: Optional[int] = None
+        self.proc: Optional[asyncio.subprocess.Process] = None
         self.log_file = None
         self.audit_file = None
 
     def start(self, rows: int = 24, cols: int = 80):
+        if not HAS_PTY:
+            # Chạy trên Windows (fallback thông báo hướng dẫn hoặc mở shell)
+            return
+
         self.master_fd, slave_fd = pty.openpty()
         self.resize(rows, cols)
 
@@ -68,7 +83,7 @@ class PtySession:
             os.close(slave_fd)
 
     def resize(self, rows: int, cols: int):
-        if self.master_fd:
+        if HAS_PTY and self.master_fd:
             try:
                 winsize = struct.pack("HHHH", rows, cols, 0, 0)
                 fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, winsize)
@@ -76,7 +91,7 @@ class PtySession:
                 pass
 
     def write_input(self, data: bytes):
-        if self.master_fd:
+        if HAS_PTY and self.master_fd:
             try:
                 os.write(self.master_fd, data)
                 # Record printable input into audit log
@@ -94,7 +109,7 @@ class PtySession:
                 pass
 
     def read_output(self, size: int = 4096) -> Optional[bytes]:
-        if self.master_fd:
+        if HAS_PTY and self.master_fd:
             try:
                 data = os.read(self.master_fd, size)
                 if data and self.log_file:
@@ -106,7 +121,7 @@ class PtySession:
         return None
 
     def close(self):
-        if self.master_fd:
+        if HAS_PTY and self.master_fd:
             try:
                 os.close(self.master_fd)
             except Exception:
@@ -143,8 +158,23 @@ async def handle_pty_websocket(websocket: WebSocket, cwd: str = "/root"):
     await websocket.accept()
     session_id = str(uuid.uuid4())
     session = PtySession(session_id, cwd)
-    session.start()
 
+    if not HAS_PTY:
+        msg = (
+            b"\r\n\x1b[1;33m[!] He thong dang chay tren Windows (khong co Linux PTY openpty).\x1b[0m\r\n"
+            b"\x1b[36mTerminal tuong tac PTY hoat dong toi uu tren moi truong Linux / VPS Ubuntu.\x1b[0m\r\n"
+            b"\x1b[32mBan co the su dung tab 'Command Hub' hoac 'Multi-Agent Studio' de chay lenh truc tiep!\x1b[0m\r\n\r\n"
+        )
+        await websocket.send_bytes(msg)
+        try:
+            while True:
+                msg_in = await websocket.receive()
+                await websocket.send_bytes(b"\r\n[Windows Local Mode - Please use Command Hub]\r\n")
+        except Exception:
+            pass
+        return
+
+    session.start()
     loop = asyncio.get_event_loop()
 
     # Async reader task

@@ -1,0 +1,73 @@
+{
+  "active_agent": "claude",
+  "agents": {
+    "claude": {
+      "id": "claude",
+      "name": "Claude Agent",
+      "provider": "anthropic",
+      "badge": "Anthropic AI",
+      "color": "#E06D53",
+      "icon": "🟣",
+      "description": "Chuyên gia phân tích sâu sắc, viết bài SEO E-E-A-T, audit cấu trúc và code phức tạp.",
+      "cli_command": "claude",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "api_key": "",
+      "base_url": "https://api.anthropic.com/v1",
+      "default_model": "claude-3-7-sonnet-20250219",
+      "models": [
+        "claude-3-7-sonnet-20250219",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022"
+      ],
+      "max_tokens": 8192,
+      "temperature": 0.7,
+      "system_prompt": "Bạn là chuyên gia SEO & Kỹ sư phần mềm cao cấp, chuyên sâu về E-E-A-T, Google Search Quality Guidelines và tối ưu hóa nội dung công nghiệp B2B."
+    },
+    "gemini": {
+      "id": "gemini",
+      "name": "Gemini Agent",
+      "provider": "google",
+      "badge": "Google DeepMind",
+      "color": "#3B82F6",
+      "icon": "🔵",
+      "description": "Tốc độ phản hồi cực nhanh, ngữ cảnh siêu lớn (1M+ tokens), tra cứu và tổng hợp thông tin sắc bén.",
+      "cli_command": "gemini",
+      "api_key_env": "GEMINI_API_KEY",
+      "api_key": "",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "default_model": "gemini-2.5-flash",
+      "models": [
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-pro"
+      ],
+      "max_tokens": 8192,
+      "temperature": 0.7,
+      "system_prompt": "Bạn là chuyên gia phân tích chất lượng tìm kiếm Google, am hiểu thuật toán xếp hạng và quy chuẩn đánh giá E-E-A-T."
+    },
+    "gpt_code": {
+      "id": "gpt_code",
+      "name": "GPT Code Agent",
+      "provider": "openai",
+      "badge": "OpenAI",
+      "color": "#10B981",
+      "icon": "🟢",
+      "description": "Suy luận logic, viết mã nguồn chuẩn xác, tối ưu hóa Technical SEO, regex và schema structured data.",
+      "cli_command": "openai",
+      "api_key_env": "OPENAI_API_KEY",
+      "api_key": "",
+      "base_url": "https://api.openai.com/v1",
+      "default_model": "gpt-4o",
+      "models": [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "o3-mini",
+        "gpt-4-turbo"
+      ],
+      "max_tokens": 8192,
+      "temperature": 0.7,
+      "system_prompt": "Bạn là chuyên gia lập trình và Technical SEO, chuyên xử lý mã nguồn, cấu trúc dữ liệu schema và thuật toán tìm kiếm."
+    }
+  }
+}

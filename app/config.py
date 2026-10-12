@@ -18,8 +18,9 @@ RATE_LIMIT_MAX_ATTEMPTS = 10   # Tối đa 10 lần nhập trong 1 phút
 RATE_LIMIT_WINDOW_SECONDS = 60 # Cửa sổ thời gian 60 giây
 
 # Default and known working directories
-WORKSPACE_ROOT = Path("/root")
+WORKSPACE_ROOT = Path("/root") if Path("/root").exists() else BASE_DIR.parent
 PRESET_PROJECTS = [
+    {"name": "Core Rule & EEAT Hub", "path": str(BASE_DIR.parent), "badge": "Workspace"},
     {"name": "Site Dầu Công Nghiệp", "path": "/root/site-dau-cong-nghiep", "badge": "SEO Target"},
     {"name": "Bê Tông - Đăng Ký Lên", "path": "/root/betong/danky_len", "badge": "SEO Target"},
     {"name": "Bê Tông - Mr Cường", "path": "/root/betong/mrcuong_betong", "badge": "Target"},

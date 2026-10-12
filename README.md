@@ -30,6 +30,17 @@
    - Cơ chế giới hạn: **Tối đa 10 lần thử trong 60 giây**. Tự động khóa và hiển thị đồng hồ đếm ngược nếu vượt quá số lần cho phép.
    - Phiên làm việc duy trì an toàn qua `HttpOnly Cookie`.
 
+6. **🎯 EEAT Audit Studio GUI Tích Hợp Trực Tiếp**:
+   - Menu trực tiếp trên thanh điều hướng sau đăng nhập.
+   - Xem và tương tác toàn diện với bảng điều khiển kiểm định chất lượng nội dung B2B & Google Search Quality Rater Guidelines (QRG).
+   - Hỗ trợ tải lại hoặc mở trong tab trình duyệt độc lập.
+
+7. **🤖 Hệ Thống Multi-Agent Đa Trí Tuệ (Claude / Gemini / GPT Code)**:
+   - File cấu hình máy chủ: `config/agents_config.json`.
+   - Lựa chọn linh hoạt giữa **Claude** (Anthropic), **Gemini** (Google), và **GPT Code** (OpenAI).
+   - Thiết lập trực tiếp API Key, Model, Nhiệt độ (Temperature), Max Tokens và System Prompt ngay trên giao diện Web UI hoặc qua file cấu hình.
+   - Sân chơi (Playground) chạy prompt trực tiếp, hỗ trợ mẫu câu lệnh E-E-A-T, Content Brief và Code Audit.
+
 ---
 
 ## 🏗️ Cấu Trúc Dự Án

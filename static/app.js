@@ -20,7 +20,10 @@ const state = {
   showingRawReport: false,
   guides: {},
   activeGuideTool: "seo",
-  isGuideOpen: false
+  isGuideOpen: false,
+  agents: [],
+  activeAgentId: "claude",
+  modalActiveAgentId: "claude"
 };
 
 // ==========================================================================
@@ -61,6 +64,8 @@ async function initApp() {
   setupReports();
   setupLogs();
   setupGuides();
+  setupEeatStudio();
+  await setupAgentsHub();
 }
 
 function setupAuth() {
@@ -239,6 +244,14 @@ function setupTabs() {
         loadReportsList();
       } else if (targetId === "tab-logs") {
         loadLogsList();
+      } else if (targetId === "tab-agents") {
+        loadAgentsList();
+      } else if (targetId === "tab-eeat-studio") {
+        // Trigger resize or reload check if needed
+        const iframe = document.getElementById("eeat-iframe");
+        if (iframe && (!iframe.src || iframe.src === "about:blank")) {
+          iframe.src = "/eeat";
+        }
       }
     });
   });
@@ -1182,4 +1195,427 @@ function formatCmdSyntax(cmd) {
   const prefix = parts[0];
   const rest = parts.slice(1).join(" ");
   return `<span class="cmd-prefix">${prefix}</span> ${rest}`;
+}
+
+// ==========================================================================
+// 8. EEAT Studio Embedded GUI Integration
+// ==========================================================================
+function setupEeatStudio() {
+  const reloadBtn = document.getElementById("btn-reload-eeat");
+  const iframe = document.getElementById("eeat-iframe");
+
+  if (reloadBtn && iframe) {
+    reloadBtn.addEventListener("click", () => {
+      iframe.src = "/eeat?t=" + Date.now();
+      const originalText = reloadBtn.innerHTML;
+      reloadBtn.innerHTML = `<span>✓ Đã làm mới</span>`;
+      setTimeout(() => {
+        reloadBtn.innerHTML = originalText;
+      }, 1200);
+    });
+  }
+}
+
+// ==========================================================================
+// 9. Multi-Agent AI Hub (Claude, Gemini, GPT Code)
+// ==========================================================================
+async function setupAgentsHub() {
+  // Modal toggle listeners
+  const openSettingsBtn = document.getElementById("btn-open-agent-settings");
+  const closeSettingsBtn = document.getElementById("modal-agent-close-btn");
+  const saveSettingsBtn = document.getElementById("btn-save-agent-settings");
+  const modal = document.getElementById("agent-settings-modal");
+
+  if (openSettingsBtn && modal) {
+    openSettingsBtn.addEventListener("click", () => {
+      openAgentSettingsModal();
+    });
+  }
+
+  if (closeSettingsBtn && modal) {
+    closeSettingsBtn.addEventListener("click", () => {
+      modal.classList.remove("active");
+    });
+  }
+
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) modal.classList.remove("active");
+    });
+  }
+
+  if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener("click", async () => {
+      await saveCurrentAgentSettings();
+    });
+  }
+
+  // Quick Prompt buttons
+  document.querySelectorAll(".quick-prompt-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const prompt = btn.dataset.prompt;
+      const promptInput = document.getElementById("agent-prompt-input");
+      if (promptInput) {
+        promptInput.value = prompt;
+        promptInput.focus();
+      }
+    });
+  });
+
+  // Run Agent Button
+  const runBtn = document.getElementById("btn-run-agent");
+  if (runBtn) {
+    runBtn.addEventListener("click", async () => {
+      await executeCurrentAgentPrompt();
+    });
+  }
+
+  // Copy Agent Output
+  const copyBtn = document.getElementById("btn-copy-agent-output");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      const outputElem = document.getElementById("agent-response-content");
+      if (outputElem) {
+        navigator.clipboard.writeText(outputElem.innerText).then(() => {
+          const original = copyBtn.innerText;
+          copyBtn.innerText = "✓ Đã sao chép";
+          setTimeout(() => { copyBtn.innerText = original; }, 1500);
+        });
+      }
+    });
+  }
+
+  // Initial load
+  await loadAgentsList();
+}
+
+async function loadAgentsList() {
+  try {
+    const res = await authFetch("/api/agents");
+    if (!res.ok) return;
+    const data = await res.json();
+    state.agents = data.agents || [];
+    state.activeAgentId = data.active_agent || "claude";
+    state.modalActiveAgentId = state.activeAgentId;
+
+    renderAgentCards();
+    updateActiveAgentRunnerUI();
+  } catch (err) {
+    console.error("Lỗi tải danh sách Agents:", err);
+  }
+}
+
+function renderAgentCards() {
+  const container = document.getElementById("agents-cards-container");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  state.agents.forEach(agent => {
+    const isSelected = agent.id === state.activeAgentId;
+    const card = document.createElement("div");
+    card.className = `agent-card ${isSelected ? 'active' : ''}`;
+    card.style.setProperty("--card-accent-color", agent.color || "var(--accent-primary)");
+
+    card.innerHTML = `
+      <div class="agent-card-header">
+        <div class="agent-card-title-wrap">
+          <span class="agent-card-icon">${agent.icon || '🤖'}</span>
+          <div>
+            <div class="agent-card-name">${escapeHtml(agent.name)}</div>
+            <div class="agent-card-badge">${escapeHtml(agent.badge)}</div>
+          </div>
+        </div>
+        <div class="agent-status-indicator ${agent.has_key ? 'ready' : 'missing-key'}">
+          <span class="pulse-dot" style="background:${agent.has_key ? '#10B981' : '#F59E0B'}"></span>
+          <span>${agent.has_key ? 'API Ready' : 'Chưa có Key'}</span>
+        </div>
+      </div>
+      <div class="agent-card-desc">${escapeHtml(agent.description)}</div>
+      <div class="agent-card-footer">
+        <span class="agent-model-pill">${escapeHtml(agent.default_model)}</span>
+        <span class="agent-active-tag">✓ ĐANG CHỌN</span>
+      </div>
+    `;
+
+    card.addEventListener("click", async () => {
+      if (agent.id !== state.activeAgentId) {
+        await selectActiveAgent(agent.id);
+      }
+    });
+
+    container.appendChild(card);
+  });
+}
+
+async function selectActiveAgent(agentId) {
+  try {
+    const res = await authFetch("/api/agents/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent_id: agentId })
+    });
+    if (res.ok) {
+      state.activeAgentId = agentId;
+      renderAgentCards();
+      updateActiveAgentRunnerUI();
+    }
+  } catch (err) {
+    console.error("Lỗi chọn Agent:", err);
+  }
+}
+
+function updateActiveAgentRunnerUI() {
+  const agent = state.agents.find(a => a.id === state.activeAgentId);
+  if (!agent) return;
+
+  const badgeElem = document.getElementById("active-agent-badge");
+  const modelDisplay = document.getElementById("active-model-display");
+  const modelSelect = document.getElementById("agent-model-select");
+
+  if (badgeElem) {
+    badgeElem.innerHTML = `${agent.icon || '🤖'} ${escapeHtml(agent.name)}`;
+    badgeElem.style.borderColor = agent.color || "var(--accent-primary)";
+    badgeElem.style.color = agent.color || "var(--accent-primary)";
+  }
+
+  if (modelDisplay) {
+    modelDisplay.textContent = agent.default_model;
+  }
+
+  if (modelSelect && agent.models) {
+    modelSelect.innerHTML = "";
+    agent.models.forEach(m => {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      if (m === agent.default_model) opt.selected = true;
+      modelSelect.appendChild(opt);
+    });
+  }
+}
+
+async function executeCurrentAgentPrompt() {
+  const promptInput = document.getElementById("agent-prompt-input");
+  const modelSelect = document.getElementById("agent-model-select");
+  const tempSelect = document.getElementById("agent-temp-select");
+  const statusElem = document.getElementById("agent-run-status");
+  const outputElem = document.getElementById("agent-response-content");
+  const copyBtn = document.getElementById("btn-copy-agent-output");
+  const spinner = document.getElementById("agent-btn-spinner");
+  const btnText = document.getElementById("agent-btn-text");
+  const runBtn = document.getElementById("btn-run-agent");
+
+  const prompt = promptInput ? promptInput.value.trim() : "";
+  if (!prompt) {
+    alert("Vui lòng nhập câu hỏi hoặc prompt cho Agent");
+    return;
+  }
+
+  const model = modelSelect ? modelSelect.value : null;
+  const temp = tempSelect ? parseFloat(tempSelect.value) : 0.7;
+
+  if (runBtn) runBtn.disabled = true;
+  if (spinner) spinner.style.display = "inline-block";
+  if (btnText) btnText.textContent = "Đang xử lý...";
+  if (statusElem) {
+    statusElem.textContent = "⏳ Đang kết nối tới Agent...";
+    statusElem.style.color = "var(--accent-cyan)";
+  }
+  if (outputElem) {
+    outputElem.innerHTML = `<div class="agent-placeholder"><p>⏳ AI Agent đang suy nghĩ và tổng hợp kết quả...</p></div>`;
+  }
+  if (copyBtn) copyBtn.style.display = "none";
+
+  const startTime = Date.now();
+
+  try {
+    const res = await authFetch("/api/agents/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent_id: state.activeAgentId,
+        prompt: prompt,
+        model: model,
+        temperature: temp
+      })
+    });
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    if (res.ok) {
+      const data = await res.json();
+      const responseText = data.response || "Không có phản hồi từ Agent";
+
+      if (window.marked && typeof window.marked.parse === "function") {
+        outputElem.innerHTML = window.marked.parse(responseText);
+      } else {
+        outputElem.textContent = responseText;
+      }
+
+      if (statusElem) {
+        statusElem.textContent = `✓ Hoàn thành trong ${elapsed}s (${data.model || model})`;
+        statusElem.style.color = "#10B981";
+      }
+      if (copyBtn) copyBtn.style.display = "inline-block";
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      const errMsg = errData.detail || errData.error || `HTTP ${res.status}`;
+      outputElem.innerHTML = `<div style="color:#EF4444; padding:10px; background:rgba(239,68,68,0.1); border-radius:6px;">⚠️ Lỗi: ${escapeHtml(errMsg)}</div>`;
+      if (statusElem) {
+        statusElem.textContent = `✕ Thất bại (${elapsed}s)`;
+        statusElem.style.color = "#EF4444";
+      }
+    }
+  } catch (err) {
+    outputElem.innerHTML = `<div style="color:#EF4444; padding:10px; background:rgba(239,68,68,0.1); border-radius:6px;">⚠️ Lỗi kết nối: ${escapeHtml(err.message)}</div>`;
+    if (statusElem) {
+      statusElem.textContent = "✕ Lỗi mạng hoặc server";
+      statusElem.style.color = "#EF4444";
+    }
+  } finally {
+    if (runBtn) runBtn.disabled = false;
+    if (spinner) spinner.style.display = "none";
+    if (btnText) btnText.textContent = "⚡ Chạy Với Agent Này";
+  }
+}
+
+function openAgentSettingsModal() {
+  const modal = document.getElementById("agent-settings-modal");
+  if (!modal) return;
+  modal.classList.add("active");
+  renderAgentSettingsModalTabs();
+  renderAgentSettingsForm(state.modalActiveAgentId);
+}
+
+function renderAgentSettingsModalTabs() {
+  const tabsContainer = document.getElementById("agent-settings-tabs");
+  if (!tabsContainer) return;
+  tabsContainer.innerHTML = "";
+
+  state.agents.forEach(agent => {
+    const isTabActive = agent.id === state.modalActiveAgentId;
+    const btn = document.createElement("button");
+    btn.className = `agent-modal-tab-btn ${isTabActive ? 'active' : ''}`;
+    btn.innerHTML = `${agent.icon || '🤖'} <span>${escapeHtml(agent.name)}</span>`;
+    btn.addEventListener("click", () => {
+      state.modalActiveAgentId = agent.id;
+      renderAgentSettingsModalTabs();
+      renderAgentSettingsForm(agent.id);
+    });
+    tabsContainer.appendChild(btn);
+  });
+}
+
+function renderAgentSettingsForm(agentId) {
+  const formContainer = document.getElementById("agent-settings-form-container");
+  if (!formContainer) return;
+
+  const agent = state.agents.find(a => a.id === agentId);
+  if (!agent) return;
+
+  formContainer.innerHTML = `
+    <div class="agent-form-group">
+      <label>Khóa API (API Key cho ${escapeHtml(agent.name)}):</label>
+      <div class="password-wrapper" style="display:flex; gap:6px;">
+        <input type="password" id="modal-agent-key-input" placeholder="${agent.has_key ? 'Đã lưu: ' + agent.masked_key : 'Nhập API Key...'}" style="flex:1;" />
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-modal-key">👁️</button>
+      </div>
+      <span class="form-hint">Hoặc đặt biến môi trường <code>${escapeHtml(agent.api_key_env)}</code> trên máy chủ.</span>
+    </div>
+
+    <div class="agent-form-group">
+      <label>Model mặc định:</label>
+      <select id="modal-agent-default-model">
+        ${(agent.models || []).map(m => `<option value="${m}" ${m === agent.default_model ? 'selected' : ''}>${m}</option>`).join('')}
+      </select>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+      <div class="agent-form-group">
+        <label>Nhiệt độ (Temperature):</label>
+        <input type="number" step="0.1" min="0" max="2" id="modal-agent-temp" value="${agent.temperature !== undefined ? agent.temperature : 0.7}" />
+      </div>
+      <div class="agent-form-group">
+        <label>Tối đa Tokens (Max Tokens):</label>
+        <input type="number" step="512" min="1024" max="32768" id="modal-agent-max-tokens" value="${agent.max_tokens || 8192}" />
+      </div>
+    </div>
+
+    <div class="agent-form-group">
+      <label>System Prompt (Chỉ dẫn hệ thống chuyên sâu):</label>
+      <textarea id="modal-agent-system-prompt" rows="3">${escapeHtml(agent.system_prompt || '')}</textarea>
+    </div>
+  `;
+
+  const toggleBtn = document.getElementById("btn-toggle-modal-key");
+  const keyInput = document.getElementById("modal-agent-key-input");
+  if (toggleBtn && keyInput) {
+    toggleBtn.addEventListener("click", () => {
+      const isPwd = keyInput.type === "password";
+      keyInput.type = isPwd ? "text" : "password";
+      toggleBtn.textContent = isPwd ? "🔒" : "👁️";
+    });
+  }
+}
+
+async function saveCurrentAgentSettings() {
+  const agentId = state.modalActiveAgentId;
+  const keyInput = document.getElementById("modal-agent-key-input");
+  const modelSelect = document.getElementById("modal-agent-default-model");
+  const tempInput = document.getElementById("modal-agent-temp");
+  const maxTokensInput = document.getElementById("modal-agent-max-tokens");
+  const systemPromptInput = document.getElementById("modal-agent-system-prompt");
+  const statusElem = document.getElementById("agent-save-status");
+  const saveBtn = document.getElementById("btn-save-agent-settings");
+
+  const updates = {};
+  if (keyInput && keyInput.value.trim()) {
+    updates.api_key = keyInput.value.trim();
+  }
+  if (modelSelect) updates.default_model = modelSelect.value;
+  if (tempInput) updates.temperature = parseFloat(tempInput.value) || 0.7;
+  if (maxTokensInput) updates.max_tokens = parseInt(maxTokensInput.value, 10) || 4096;
+  if (systemPromptInput) updates.system_prompt = systemPromptInput.value.trim();
+
+  if (saveBtn) saveBtn.disabled = true;
+  if (statusElem) {
+    statusElem.textContent = "⏳ Đang lưu...";
+    statusElem.style.color = "var(--text-muted)";
+  }
+
+  try {
+    const res = await authFetch("/api/agents/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent_id: agentId,
+        updates: updates
+      })
+    });
+
+    if (res.ok) {
+      if (statusElem) {
+        statusElem.textContent = "✓ Đã lưu cấu hình vào agents_config.json";
+        statusElem.style.color = "#10B981";
+      }
+      await loadAgentsList();
+      setTimeout(() => {
+        if (statusElem) statusElem.textContent = "";
+      }, 2500);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      if (statusElem) {
+        statusElem.textContent = "✕ Lỗi: " + (err.detail || "Không thể lưu");
+        statusElem.style.color = "#EF4444";
+      }
+    }
+  } catch (err) {
+    if (statusElem) {
+      statusElem.textContent = "✕ Lỗi mạng: " + err.message;
+      statusElem.style.color = "#EF4444";
+    }
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
 }

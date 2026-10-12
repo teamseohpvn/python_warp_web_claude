@@ -20,6 +20,7 @@ from app.task_runner import task_runner
 from app.pty_manager import handle_pty_websocket
 from app.log_manager import LogManager
 from app.reports_manager import ReportsManager
+from app.agents_manager import agents_manager
 
 app = FastAPI(title="Claude SEO & Blog Web Console", version="1.0.0")
 
@@ -28,12 +29,33 @@ static_dir = BASE_DIR / "static"
 static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# Mount EEAT Studio App
+eeat_dir = BASE_DIR.parent / "app"
+if not eeat_dir.exists():
+    eeat_dir = BASE_DIR / "eeat_app"
+if eeat_dir.exists():
+    app.mount("/eeat", StaticFiles(directory=str(eeat_dir), html=True), name="eeat")
+
 class LoginRequest(BaseModel):
     password: str
 
 class RunTaskRequest(BaseModel):
     cmd: str
     cwd: str = "/root"
+
+class SelectAgentRequest(BaseModel):
+    agent_id: str
+
+class UpdateAgentConfigRequest(BaseModel):
+    agent_id: str
+    updates: dict
+
+class RunAgentRequest(BaseModel):
+    prompt: str
+    agent_id: Optional[str] = None
+    model: Optional[str] = None
+    system_prompt: Optional[str] = None
+    temperature: Optional[float] = None
 
 # --- Authentication Endpoints ---
 
@@ -214,3 +236,39 @@ async def get_report_content(path: str = Query(...)):
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])
     return res
+
+# --- Multi-Agent API Endpoints (Claude, Gemini, GPT Code) ---
+
+@app.get("/api/agents", dependencies=[Depends(require_auth)])
+async def get_agents():
+    return agents_manager.get_public_agents_info()
+
+@app.post("/api/agents/select", dependencies=[Depends(require_auth)])
+async def select_agent(req: SelectAgentRequest):
+    success = agents_manager.set_active_agent(req.agent_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Không thể chọn agent này")
+    return {"success": True, "active_agent": req.agent_id}
+
+@app.post("/api/agents/update", dependencies=[Depends(require_auth)])
+async def update_agent_config(req: UpdateAgentConfigRequest):
+    success = agents_manager.update_agent_config(req.agent_id, req.updates)
+    if not success:
+        raise HTTPException(status_code=400, detail="Không thể cập nhật cấu hình cho agent này")
+    return {"success": True}
+
+@app.post("/api/agents/run", dependencies=[Depends(require_auth)])
+async def run_agent(req: RunAgentRequest):
+    if not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="Nội dung prompt không được để trống")
+    active_agent = req.agent_id or agents_manager.load_config().get("active_agent", "claude")
+    result = await agents_manager.execute_agent(
+        agent_id=active_agent,
+        prompt=req.prompt,
+        model=req.model,
+        system_prompt=req.system_prompt,
+        temperature=req.temperature
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Lỗi thực thi Agent"))
+    return result
