@@ -250,7 +250,7 @@ function setupTabs() {
         // Trigger resize or reload check if needed
         const iframe = document.getElementById("eeat-iframe");
         if (iframe && (!iframe.src || iframe.src === "about:blank")) {
-          iframe.src = "/eeat";
+          iframe.src = "/eeat/";
         }
       }
     });
@@ -1206,7 +1206,7 @@ function setupEeatStudio() {
 
   if (reloadBtn && iframe) {
     reloadBtn.addEventListener("click", () => {
-      iframe.src = "/eeat?t=" + Date.now();
+      iframe.src = "/eeat/?t=" + Date.now();
       const originalText = reloadBtn.innerHTML;
       reloadBtn.innerHTML = `<span>✓ Đã làm mới</span>`;
       setTimeout(() => {

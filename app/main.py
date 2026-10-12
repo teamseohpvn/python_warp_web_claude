@@ -30,11 +30,21 @@ static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Mount EEAT Studio App
-eeat_dir = BASE_DIR.parent / "app"
+eeat_dir = BASE_DIR / "eeat_app"
 if not eeat_dir.exists():
-    eeat_dir = BASE_DIR / "eeat_app"
+    eeat_dir = BASE_DIR.parent / "app"
+
 if eeat_dir.exists():
     app.mount("/eeat", StaticFiles(directory=str(eeat_dir), html=True), name="eeat")
+
+@app.get("/eeat", response_class=HTMLResponse)
+@app.get("/eeat/", response_class=HTMLResponse)
+async def serve_eeat_root():
+    index_file = eeat_dir / "index.html"
+    if index_file.exists():
+        with open(index_file, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    raise HTTPException(status_code=404, detail="EEAT Studio index.html not found")
 
 class LoginRequest(BaseModel):
     password: str
