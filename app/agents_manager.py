@@ -2,7 +2,10 @@ import os
 import re
 import json
 import time
+import shutil
 import asyncio
+import subprocess
+import tempfile
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -25,6 +28,16 @@ NON_CHAT_KEYWORDS = (
     "audio", "realtime", "transcribe", "image", "imagen", "imagine", "search",
     "aqa", "sora", "computer-use", "veo", "instruct", "-live"
 )
+
+# Claude Code CLI đã đăng nhập sẵn (claude.ai) → agent Claude chạy qua `claude -p`, không cần API key.
+# Alias luôn trỏ tới bản mới nhất của từng họ model (vd opus → claude-opus-5-5).
+CLAUDE_CODE_MODELS = {
+    "opus": "Opus – bản mới nhất (Claude Code)",
+    "sonnet": "Sonnet – bản mới nhất (Claude Code)",
+    "haiku": "Haiku – bản mới nhất (Claude Code)",
+}
+CLAUDE_CODE_STATUS_TTL = 300
+CLAUDE_CODE_TIMEOUT = 900
 
 # Model đã bị nhà cung cấp ngừng hỗ trợ → loại khỏi config đã lưu
 RETIRED_MODEL_PREFIXES = ("claude-3",)
@@ -189,7 +202,39 @@ class AgentsManager:
         self._models_status: Dict[str, Dict[str, Any]] = {}
         self._models_fetched_at: Dict[str, float] = {}
         self._models_lock = asyncio.Lock()
+        self._claude_code_status: Dict[str, Any] = {"checked_at": 0, "logged_in": False, "auth_method": ""}
         self._ensure_config()
+
+    def claude_code_logged_in(self) -> bool:
+        """Kiểm tra Claude Code CLI có sẵn và đã đăng nhập (cache 5 phút)"""
+        st = self._claude_code_status
+        if time.time() - st["checked_at"] < CLAUDE_CODE_STATUS_TTL:
+            return st["logged_in"]
+        logged_in, auth_method = False, ""
+        if shutil.which("claude"):
+            try:
+                out = subprocess.run(
+                    ["claude", "auth", "status"], capture_output=True, text=True, timeout=20
+                ).stdout
+                data = json.loads(out)
+                logged_in = bool(data.get("loggedIn"))
+                auth_method = data.get("authMethod", "")
+            except Exception as e:
+                print(f"[AgentsManager] Không kiểm tra được Claude Code: {e}")
+        self._claude_code_status = {"checked_at": time.time(), "logged_in": logged_in, "auth_method": auth_method}
+        return logged_in
+
+    def uses_claude_code(self, agent_id: str, agent_data: Dict[str, Any], custom_key: Optional[str] = None) -> bool:
+        """Agent Claude ưu tiên Claude Code đã đăng nhập; chỉ dùng API key khi được truyền key riêng
+        hoặc Claude Code chưa đăng nhập"""
+        if agent_data.get("provider", agent_id) != "anthropic":
+            return False
+        if custom_key and custom_key.strip():
+            return False
+        return self.claude_code_logged_in()
+
+    def has_credentials(self, agent_id: str, agent_data: Dict[str, Any], custom_key: Optional[str] = None) -> bool:
+        return bool(self.get_effective_key(agent_data, custom_key)) or self.uses_claude_code(agent_id, agent_data, custom_key)
 
     def _ensure_config(self):
         """Đảm bảo file cấu hình tồn tại và đồng bộ các model mới nhất"""
@@ -275,9 +320,12 @@ class AgentsManager:
         public_agents = []
         for a_id, a_data in agents_dict.items():
             key = self.get_effective_key(a_data)
-            has_key = bool(key)
+            claude_code = self.uses_claude_code(a_id, a_data)
+            has_key = bool(key) or claude_code
             masked_key = ""
-            if has_key:
+            if claude_code:
+                masked_key = f"Claude Code đã đăng nhập ({self._claude_code_status['auth_method'] or 'claude.ai'})"
+            elif has_key:
                 if len(key) > 8:
                     masked_key = key[:4] + "..." + key[-4:]
                 else:
@@ -295,6 +343,7 @@ class AgentsManager:
                 "api_key_env": a_data.get("api_key_env", ""),
                 "has_key": has_key,
                 "masked_key": masked_key,
+                "auth_mode": "claude_code" if claude_code else "api_key",
                 "base_url": a_data.get("base_url", ""),
                 "default_model": a_data.get("default_model", ""),
                 "models": a_data.get("models", []),
@@ -414,7 +463,22 @@ class AgentsManager:
             loop = asyncio.get_event_loop()
 
             jobs = {}
+            changed = False
             for a_id, a_data in agents.items():
+                if self.uses_claude_code(a_id, a_data):
+                    # Claude Code: alias opus/sonnet/haiku luôn là bản mới nhất, không cần gọi API
+                    ids = list(CLAUDE_CODE_MODELS)
+                    if a_data.get("models") != ids or a_data.get("models_source") != "claude_code":
+                        a_data["models"] = ids
+                        a_data["model_labels"] = dict(CLAUDE_CODE_MODELS)
+                        a_data["models_source"] = "claude_code"
+                        a_data["models_updated_at"] = datetime.now().isoformat(timespec="seconds")
+                        changed = True
+                    if a_data.get("default_model") not in ids:
+                        a_data["default_model"] = "opus"
+                        changed = True
+                    self._models_status[a_id] = {"ok": True, "count": len(ids), "mode": "claude_code"}
+                    continue
                 key = self.get_effective_key(a_data)
                 if not key:
                     self._models_status[a_id] = {"ok": False, "error": "Chưa có API key – dùng danh sách mặc định"}
@@ -423,11 +487,7 @@ class AgentsManager:
                     continue
                 jobs[a_id] = loop.run_in_executor(None, self._fetch_models, a_id, a_data, key)
 
-            if not jobs:
-                return self._models_status
-
-            results = await asyncio.gather(*jobs.values(), return_exceptions=True)
-            changed = False
+            results = await asyncio.gather(*jobs.values(), return_exceptions=True) if jobs else []
             for a_id, result in zip(jobs.keys(), results):
                 self._models_fetched_at[a_id] = now
                 if isinstance(result, Exception):
@@ -483,7 +543,11 @@ class AgentsManager:
 
         loop = asyncio.get_event_loop()
         try:
-            if provider == "anthropic" or agent_id == "claude":
+            if self.uses_claude_code(agent_id, agent, custom_api_key):
+                res = await loop.run_in_executor(
+                    None, self._call_claude_code, active_model, prompt, active_sys_prompt
+                )
+            elif provider == "anthropic" or agent_id == "claude":
                 res = await loop.run_in_executor(
                     None, self._call_anthropic, key, active_model, prompt, active_sys_prompt, active_temp, max_tokens
                 )
@@ -504,6 +568,52 @@ class AgentsManager:
             return res
         except Exception as e:
             return {"success": False, "error": f"Lỗi khi thực thi {agent_id}: {str(e)}"}
+
+    def _call_claude_code(self, model: str, prompt: str, system_prompt: str) -> Dict[str, Any]:
+        """Gọi Claude qua Claude Code CLI đã đăng nhập (`claude -p`), không dùng API key"""
+        cmd = [
+            "claude", "-p", "--output-format", "json",
+            "--tools", "",
+            "--no-session-persistence", "--disable-slash-commands", "--strict-mcp-config",
+        ]
+        if model:
+            cmd += ["--model", model]
+        if system_prompt:
+            cmd += ["--system-prompt", system_prompt]
+
+        # Bỏ API key khỏi env để CLI dùng phiên đăng nhập claude.ai thay vì key
+        env = os.environ.copy()
+        env.pop("ANTHROPIC_API_KEY", None)
+        env.pop("ANTHROPIC_AUTH_TOKEN", None)
+
+        try:
+            proc = subprocess.run(
+                cmd, input=prompt, capture_output=True, text=True,
+                timeout=CLAUDE_CODE_TIMEOUT, cwd=tempfile.gettempdir(), env=env
+            )
+        except subprocess.TimeoutExpired:
+            return {"success": False, "error": f"Claude Code quá {CLAUDE_CODE_TIMEOUT} giây không phản hồi"}
+        except Exception as e:
+            return {"success": False, "error": f"Claude Code Error: {str(e)}"}
+
+        try:
+            data = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            detail = (proc.stderr or proc.stdout or "").strip()[:500]
+            return {"success": False, "error": f"Claude Code lỗi (exit {proc.returncode}): {detail}"}
+
+        if data.get("is_error"):
+            return {"success": False, "error": f"Claude Code: {data.get('result') or data.get('subtype')}"}
+
+        resolved = list((data.get("modelUsage") or {}).keys())
+        return {
+            "success": True,
+            "agent": "claude",
+            "model": resolved[0] if resolved else model,
+            "mode": "claude_code",
+            "response": data.get("result", ""),
+            "usage": data.get("usage", {})
+        }
 
     def _call_anthropic(
         self,
