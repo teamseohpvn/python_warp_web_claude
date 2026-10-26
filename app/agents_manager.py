@@ -296,6 +296,9 @@ class AgentsManager:
                         updated = True
                     else:
                         existing_agent = agents[def_id]
+                        # Danh sách lấy trực tiếp (API/CLI) là chuẩn → không gộp lại model mặc định cũ
+                        if existing_agent.get("models_source") in ("live", "claude_code", "antigravity"):
+                            continue
                         cur_models = existing_agent.get("models", [])
                         new_models = def_data.get("models", [])
                         # Đồng bộ danh sách models mới mà không làm mất model tùy chỉnh của user
@@ -395,6 +398,8 @@ class AgentsManager:
                 "default_model": a_data.get("default_model", ""),
                 "models": a_data.get("models", []),
                 "model_labels": a_data.get("model_labels", {}),
+                "model_groups": a_data.get("model_groups", {}) if antigravity else {},
+                "quota": self._antigravity_status["quota"] if antigravity else "",
                 "models_source": a_data.get("models_source", "default"),
                 "models_updated_at": a_data.get("models_updated_at", ""),
                 "models_status": self._models_status.get(a_id, {}),
@@ -416,6 +421,13 @@ class AgentsManager:
             cfg["active_agent"] = agent_id
             return self.save_config(cfg)
         return False
+
+    def set_default_model(self, agent_id: str, model: str) -> bool:
+        """Lưu model người dùng chọn làm mặc định (chỉ nhận model có trong danh sách hiện tại)"""
+        agent = self.load_config().get("agents", {}).get(agent_id)
+        if not agent or model not in agent.get("models", []):
+            return False
+        return self.update_agent_config(agent_id, {"default_model": model})
 
     def update_agent_config(self, agent_id: str, updates: Dict[str, Any]) -> bool:
         """Cập nhật thiết lập cho một agent"""
@@ -501,7 +513,8 @@ class AgentsManager:
         return _sort_models(models)
 
     def _fetch_antigravity_models(self) -> List[Dict[str, Any]]:
-        """Lấy danh sách model Gemini mà tài khoản Antigravity được dùng (`agy models`, giữ thứ tự của CLI)"""
+        """Lấy mọi model mà tài khoản Antigravity được dùng (`agy models`), Gemini xếp trước,
+        trong mỗi nhóm giữ thứ tự của CLI"""
         proc = subprocess.run(
             ["agy", "models"], capture_output=True, text=True, timeout=60, cwd=tempfile.gettempdir()
         )
@@ -510,14 +523,19 @@ class AgentsManager:
         models = []
         for line in proc.stdout.splitlines():
             cols = line.strip().split("\t")
-            if len(cols) >= 2 and cols[0].startswith("gemini-"):
-                models.append({"id": cols[0], "label": f"{cols[1]} – Antigravity CLI"})
-        return models
+            if len(cols) >= 2 and re.match(r"^[a-z0-9][\w.-]*$", cols[0]):
+                group = "Gemini" if cols[0].startswith("gemini-") else "Model khác qua Antigravity"
+                models.append({"id": cols[0], "label": cols[1], "group": group})
+        return sorted(models, key=lambda m: m["group"] != "Gemini")
 
     async def refresh_models(self, force: bool = False) -> Dict[str, Dict[str, Any]]:
         """Lấy danh sách model mới nhất của mọi agent có API key (chạy song song) và lưu vào config.
         Lỗi mạng/key sai → giữ nguyên danh sách đã lưu lần trước."""
         async with self._models_lock:
+            if force:
+                # Bấm "làm mới" → kiểm tra lại đăng nhập/hạn mức CLI thay vì dùng cache 5 phút
+                self._claude_code_status["checked_at"] = 0
+                self._antigravity_status["checked_at"] = 0
             cfg = self.load_config()
             agents = cfg.get("agents", {})
             now = time.time()
@@ -576,12 +594,14 @@ class AgentsManager:
                 agent["models_updated_at"] = datetime.now().isoformat(timespec="seconds")
                 if a_id in antigravity_ids:
                     agent["models_source"] = "antigravity"
+                    agent["model_groups"] = {m["id"]: m["group"] for m in result}
                     if agent.get("default_model") not in ids:
                         agent["default_model"] = ANTIGRAVITY_DEFAULT_MODEL if ANTIGRAVITY_DEFAULT_MODEL in ids else ids[0]
                     self._models_status[a_id] = {"ok": True, "count": len(ids), "mode": "antigravity"}
                     changed = True
                     continue
                 agent["models_source"] = "live"
+                agent.pop("model_groups", None)
                 if agent.get("default_model") not in ids:
                     family = PREFERRED_DEFAULT_FAMILY.get(a_id, "")
                     agent["default_model"] = next((i for i in ids if family and family in i), ids[0])

@@ -310,10 +310,22 @@ async def run_agent(req: RunAgentRequest):
 # --- EEAT Content Quality Audit Endpoints ---
 
 @app.get("/api/eeat/agents")
-async def get_eeat_agents():
-    """Lấy danh sách 4 AI Agents hỗ trợ cho EEAT Audit (Claude, Gemini, GPT, Grok)"""
-    await agents_manager.refresh_models()
+async def get_eeat_agents(refresh: bool = False):
+    """Lấy danh sách 4 AI Agents hỗ trợ cho EEAT Audit (Claude, Gemini, GPT, Grok).
+    refresh=true → bỏ cache, lấy lại danh sách model và hạn mức ngay"""
+    await agents_manager.refresh_models(force=refresh)
     return agents_manager.get_public_agents_info()
+
+class EEATSelectModelRequest(BaseModel):
+    agent_id: str
+    model: str
+
+@app.post("/api/eeat/select-model")
+async def select_eeat_model(req: EEATSelectModelRequest):
+    """Ghi nhớ model người dùng chọn làm mặc định cho agent"""
+    if not agents_manager.set_default_model(req.agent_id, req.model):
+        raise HTTPException(status_code=400, detail="Model không có trong danh sách của agent này")
+    return {"success": True, "default_model": req.model}
 
 @app.post("/api/eeat/audit")
 async def audit_eeat_content(req: EEATAuditRequest):
