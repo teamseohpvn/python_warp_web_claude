@@ -287,6 +287,19 @@ const aiExecutionNotice = document.getElementById("aiExecutionNotice");
 const aiNoticeText = document.getElementById("aiNoticeText");
 const aiNoticeIcon = document.getElementById("aiNoticeIcon");
 
+// Technical score (Mục VI – thang điểm riêng)
+const btnRunTechOnly = document.getElementById("btnRunTechOnly");
+const techSpinner = document.getElementById("techSpinner");
+const techScoreVal = document.getElementById("techScoreVal");
+const techGaugeProgress = document.getElementById("techGaugeProgress");
+const techStatusBadge = document.getElementById("techStatusBadge");
+const techPageType = document.getElementById("techPageType");
+const techCitationCount = document.getElementById("techCitationCount");
+const techCapNote = document.getElementById("techCapNote");
+const techIssueBadge = document.getElementById("techIssueBadge");
+const techScaleList = document.getElementById("techScaleList");
+const techDetailContainer = document.getElementById("techDetailContainer");
+
 // Modals
 const btnExportMd = document.getElementById("btnExportMd");
 const exportModal = document.getElementById("exportModal");
@@ -395,6 +408,8 @@ function setupListeners() {
       content: ""
     });
   });
+
+  btnRunTechOnly.addEventListener("click", runTechnicalOnly);
 
   btnRunAuditText.addEventListener("click", () => {
     const text = textContentInput.value.trim();
@@ -584,6 +599,7 @@ function renderAudit(data) {
   renderDimensionCards(data.dimensions || []);
   renderProseSnippets(data.proseSnippets || []);
   renderQA(data.qaItems || []);
+  renderTechnical(data.technicalAudit);
 }
 
 function renderDimensionsBars(dimensions) {
@@ -777,7 +793,178 @@ ${(w.remedy || []).map(r => `  - ${r}`).join("\n")}
 
 ## 4. CHECKLIST BIÊN TẬP TRƯỚC KHI XUẤT BẢN
 ${(data.qaItems || []).map(q => `- [${q.checked ? 'x' : ' '}] ${q.text}`).join("\n")}
+
+---
+
+${technicalMarkdown(data.technicalAudit)}
 `;
+}
+
+// ---------- Điểm kỹ thuật (Mục VI check_EEAT.md) ----------
+// Thang điểm riêng, không cộng vào overallScore.
+
+const TECH_STATUS_TEXT = { pass: "Đạt", partial: "Một phần", fail: "Chưa đạt", na: "Không áp dụng" };
+const CITE_STATE_TEXT = { ok: "OK", dead: "404", unverified: "Kiểm tay" };
+const DEFAULT_TECH_SCALE = [
+  { min: 90, label: "Hoàn thiện", action: "Đăng / giữ nguyên" },
+  { min: 75, label: "Khá", action: "Sửa các mục thiếu ở lần cập nhật tới" },
+  { min: 60, label: "Thiếu", action: "Sửa trước khi chạy quảng cáo hoặc gửi lập chỉ mục" },
+  { min: 0, label: "Chưa đạt", action: "Sửa ngay" }
+];
+
+function esc(v) {
+  return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function techColor(score) {
+  return score >= 75 ? "var(--accent-emerald)" : score >= 60 ? "var(--accent-amber)" : "var(--accent-rose)";
+}
+
+function renderTechScale(score) {
+  const scale = DEFAULT_TECH_SCALE;
+  const idx = score == null ? -1 : scale.findIndex(b => score >= b.min);
+  techScaleList.innerHTML = scale.map((b, i) => {
+    const hi = i === 0 ? 100 : scale[i - 1].min - 1;
+    return `<div class="tech-scale-band ${i === idx ? "current" : ""}">
+      <strong>${b.min}–${hi} · ${b.label}</strong>${esc(b.action)}
+    </div>`;
+  }).join("");
+}
+
+function renderTechnical(tech) {
+  const reset = (status, msg) => {
+    techScoreVal.textContent = "–";
+    techGaugeProgress.style.strokeDashoffset = 314.16;
+    techStatusBadge.textContent = status;
+    techStatusBadge.className = "badge badge-medium";
+    techPageType.textContent = tech?.pageTypeLabel || "–";
+    techCitationCount.textContent = "–";
+    techCapNote.classList.add("hidden");
+    techIssueBadge.textContent = "–";
+    renderTechScale(null);
+    techDetailContainer.innerHTML = `<div class="card tech-empty">${msg}</div>`;
+  };
+
+  if (!tech) {
+    reset("CHƯA CHẤM", "Chưa có kết quả. Nhập URL rồi bấm <strong>🧩 Chỉ chấm kỹ thuật</strong> hoặc <strong>Bắt Đầu Audit Bằng AI</strong>.");
+    return;
+  }
+  if (!tech.available) {
+    reset("KHÔNG CHẤM", esc(tech.reason || "Không chấm được điểm kỹ thuật."));
+    return;
+  }
+  if (tech.score == null) {
+    reset("KHÔNG ÁP DỤNG", `${esc(tech.pageTypeLabel)}: ${esc((tech.notes || []).join(" "))}<br><span class="text-muted text-xs">Schema phát hiện: ${esc((tech.schemaTypes || []).join(" · "))}</span>`);
+    return;
+  }
+
+  const score = tech.score;
+  techScoreVal.textContent = score;
+  techGaugeProgress.style.strokeDashoffset = 314.16 * (1 - score / 100);
+  techGaugeProgress.style.stroke = techColor(score);
+  techStatusBadge.textContent = tech.status;
+  techStatusBadge.className = `badge badge-${tech.statusLevel === "high" ? "high" : tech.statusLevel === "low" ? "low" : "medium"}`;
+  techPageType.textContent = tech.pageTypeLabel;
+
+  const cites = tech.citations || [];
+  const okCites = cites.filter(c => c.state !== "dead").length;
+  techCitationCount.textContent = `${okCites} / ${cites.length}`;
+  techCitationCount.className = `pill-value ${cites.length ? (okCites === cites.length ? "text-emerald" : "text-amber") : "text-danger"}`;
+
+  if (tech.cap && tech.cap.applied) {
+    techCapNote.textContent = `⛔ ${tech.cap.reason} (điểm gốc ${tech.rawScore}).`;
+    techCapNote.classList.remove("hidden");
+  } else {
+    techCapNote.classList.add("hidden");
+  }
+
+  const items = tech.items || [];
+  const open = items.filter(i => i.status === "fail" || i.status === "partial").length;
+  techIssueBadge.textContent = open;
+  renderTechScale(score);
+
+  const rows = items.map(i => `
+    <tr>
+      <td class="num">${esc(i.id)}</td>
+      <td>${esc(i.name)}</td>
+      <td class="num">${i.applicable ? `${i.points} / ${i.max}` : "–"}</td>
+      <td><span class="tech-status ${i.status}">${TECH_STATUS_TEXT[i.status] || i.status}</span></td>
+      <td>${esc(i.details)}</td>
+    </tr>`).join("");
+
+  const citeList = cites.length
+    ? `<ul class="tech-cite-list">${cites.map(c => `
+        <li><span class="tech-cite-code ${c.state}">${CITE_STATE_TEXT[c.state] || ""} ${c.httpStatus || ""}</span>
+        <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url)}</a></li>`).join("")}</ul>`
+    : `<p class="tech-empty">Không có citation trong schema.</p>`;
+
+  techDetailContainer.innerHTML = `
+    <div class="card mb-4">
+      <h4 class="tech-block-title">${esc(tech.pageTypeLabel)} · ${score}/100 · ${esc(tech.status)}</h4>
+      <div class="tech-table-wrap">
+        <table class="tech-table">
+          <thead><tr><th>#</th><th>Hạng mục</th><th>Điểm</th><th>Kết quả</th><th>Chi tiết</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card mb-4">
+      <h4 class="tech-block-title">Nguồn dẫn (citation) và trạng thái link</h4>
+      ${citeList}
+    </div>
+    <div class="card">
+      <h4 class="tech-block-title">Ghi chú</h4>
+      <ul class="tech-notes">
+        ${(tech.notes || []).map(n => `<li>${esc(n)}</li>`).join("")}
+        <li>Schema phát hiện: ${esc((tech.schemaTypes || []).join(" · "))}</li>
+      </ul>
+    </div>`;
+}
+
+function technicalMarkdown(tech) {
+  if (!tech) return "## 5. ĐIỂM KỸ THUẬT (MỤC VI)\nChưa chấm.";
+  if (!tech.available) return `## 5. ĐIỂM KỸ THUẬT (MỤC VI)\n${tech.reason || "Không chấm được."}`;
+  if (tech.score == null) return `## 5. ĐIỂM KỸ THUẬT (MỤC VI)\n${tech.pageTypeLabel}: không áp dụng.`;
+  return `## 5. ĐIỂM KỸ THUẬT (MỤC VI) – thang điểm riêng, không cộng vào điểm nội dung
+**Loại trang:** ${tech.pageTypeLabel} · **Điểm kỹ thuật:** ${tech.score} / 100 (${tech.status})${tech.cap && tech.cap.applied ? `\n**Điều kiện chặn:** ${tech.cap.reason}` : ""}
+
+| # | Hạng mục | Điểm | Kết quả | Chi tiết |
+|---|---|:---:|---|---|
+${(tech.items || []).map(i => `| ${i.id} | ${i.name} | ${i.applicable ? `${i.points}/${i.max}` : "–"} | ${TECH_STATUS_TEXT[i.status] || i.status} | ${String(i.details).replace(/\|/g, "/")} |`).join("\n")}
+
+**Citation:**
+${(tech.citations || []).map(c => `- [${CITE_STATE_TEXT[c.state] || ""} ${c.httpStatus}] ${c.url}`).join("\n") || "- (không có)"}`;
+}
+
+async function runTechnicalOnly() {
+  const url = targetUrlInput.value.trim();
+  if (!url) {
+    alert("Vui lòng nhập URL cần chấm kỹ thuật!");
+    return;
+  }
+  techSpinner.classList.remove("hidden");
+  btnRunTechOnly.disabled = true;
+  try {
+    const res = await fetch("/api/eeat/technical", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.detail || `Lỗi HTTP ${res.status}`);
+    }
+    const tech = await res.json();
+    // Chỉ cập nhật phần kỹ thuật, giữ nguyên điểm nội dung đang hiển thị
+    currentAudit.technicalAudit = tech;
+    renderTechnical(tech);
+    showNotice(`✓ Đã chấm kỹ thuật: ${tech.pageTypeLabel || ""} ${tech.score != null ? tech.score + "/100" : ""}. Điểm nội dung không thay đổi.`, "success");
+  } catch (err) {
+    showNotice(`Không chấm được kỹ thuật: ${err.message}`, "warning");
+  } finally {
+    techSpinner.classList.add("hidden");
+    btnRunTechOnly.disabled = false;
+  }
 }
 
 function downloadMarkdownFile() {

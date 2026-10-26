@@ -1185,3 +1185,97 @@ body {
   }
 }
 
+
+/* ---------- Điểm kỹ thuật (Mục VI) ---------- */
+.tech-score-card { margin-top: 0; }
+.tech-score-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 12px 0;
+}
+.radial-gauge-sm {
+  width: 104px;
+  height: 104px;
+  flex-shrink: 0;
+}
+.radial-gauge-sm .gauge-number { font-size: 1.9rem; }
+.tech-score-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.tech-cap-note {
+  font-size: 0.8rem;
+  color: var(--badge-low-text);
+  background: var(--badge-low-bg);
+  border: 1px solid var(--badge-low-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  line-height: 1.45;
+}
+.tech-separate-note {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.text-cyan { color: var(--accent-cyan); }
+.tech-scale {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.tech-scale-band {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+.tech-scale-band strong { display: block; color: var(--text-primary); font-size: 0.85rem; }
+.tech-scale-band.current { opacity: 1; border-color: var(--border-focus); box-shadow: var(--shadow-glow); }
+.tech-table-wrap { overflow-x: auto; }
+.tech-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+.tech-table th, .tech-table td {
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+.tech-table th { color: var(--text-muted); font-weight: 600; font-size: 0.75rem; letter-spacing: 0.04em; }
+.tech-table td.num { font-family: var(--font-mono); white-space: nowrap; }
+.tech-status { font-weight: 700; white-space: nowrap; }
+.tech-status.pass { color: var(--accent-emerald); }
+.tech-status.partial { color: var(--accent-amber); }
+.tech-status.fail { color: var(--accent-rose); }
+.tech-status.na { color: var(--text-muted); }
+.tech-cite-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.tech-cite-list li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.tech-cite-list a { color: #38bdf8; overflow-wrap: anywhere; }
+.tech-cite-code { font-family: var(--font-mono); flex-shrink: 0; width: 68px; }
+.tech-cite-code.ok { color: var(--accent-emerald); }
+.tech-cite-code.dead { color: var(--accent-rose); }
+.tech-cite-code.unverified { color: var(--accent-amber); }
+.tech-notes { margin: 0; padding-left: 18px; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; }
+.tech-empty { color: var(--text-secondary); font-size: 0.88rem; }
+.tech-block-title { font-size: 0.95rem; margin-bottom: 10px; }
+@media (max-width: 720px) {
+  .tech-scale { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.hidden { display: none !important; }
+.mb-4 { margin-bottom: 16px; }

@@ -106,6 +106,10 @@
           <button id="btnLoadPreset" class="btn btn-secondary" title="Nạp nhanh mẫu kiểm tra ENEOS 68">
             ⚡ Mẫu: ENEOS 68
           </button>
+          <button id="btnRunTechOnly" class="btn btn-secondary" title="Chỉ chấm Điểm hoàn thiện kỹ thuật (schema, Article, citation), không gọi AI">
+            <span class="btn-spinner hidden" id="techSpinner"></span>
+            🧩 Chỉ chấm kỹ thuật
+          </button>
           <button id="btnRunAudit" class="btn btn-primary pulse-btn">
             <span class="btn-spinner hidden" id="auditSpinner"></span>
             <span class="btn-text" id="btnRunText">Bắt Đầu Audit Bằng AI</span>
@@ -140,7 +144,7 @@
         <!-- Hero Score Card -->
         <div class="card hero-score-card">
           <div class="score-card-header">
-            <span class="card-eyebrow">TỔNG ĐIỂM CHẤT LƯỢNG & E-E-A-T</span>
+            <span class="card-eyebrow">ĐIỂM NỘI DUNG (E-E-A-T &amp; MC)</span>
             <span class="badge badge-medium" id="ratingBadge">MEDIUM</span>
           </div>
 
@@ -179,6 +183,32 @@
               <span class="pill-value text-cyan" id="analyzedByBadge">🟣 Claude 3.7</span>
             </div>
           </div>
+        </div>
+
+        <!-- Technical Score Card (thang điểm riêng, không cộng vào điểm nội dung) -->
+        <div class="card tech-score-card" id="techScoreCard">
+          <div class="score-card-header">
+            <span class="card-eyebrow">ĐIỂM KỸ THUẬT (SCHEMA &amp; NGUỒN DẪN)</span>
+            <span class="badge badge-medium" id="techStatusBadge">CHƯA CHẤM</span>
+          </div>
+          <div class="tech-score-row">
+            <div class="radial-gauge radial-gauge-sm">
+              <svg viewBox="0 0 120 120">
+                <circle class="gauge-bg" cx="60" cy="60" r="50"></circle>
+                <circle class="gauge-fill" id="techGaugeProgress" cx="60" cy="60" r="50" style="stroke-dashoffset: 314.16;"></circle>
+              </svg>
+              <div class="gauge-value-wrap">
+                <span class="gauge-number" id="techScoreVal">–</span>
+                <span class="gauge-unit">/ 100</span>
+              </div>
+            </div>
+            <div class="tech-score-meta">
+              <div class="pill"><span class="pill-label">Loại trang</span><span class="pill-value text-cyan" id="techPageType">–</span></div>
+              <div class="pill"><span class="pill-label">Citation</span><span class="pill-value" id="techCitationCount">–</span></div>
+            </div>
+          </div>
+          <p class="tech-cap-note hidden" id="techCapNote"></p>
+          <p class="tech-separate-note">Chấm riêng theo Mục VI check_EEAT.md bằng quy tắc cố định từ JSON-LD. <strong>Không cộng vào điểm nội dung.</strong></p>
         </div>
 
         <!-- Dimension Quick Breakdown -->
@@ -225,6 +255,11 @@
             <span class="nav-tab-icon">✨</span>
             Mẫu Viết Khắc Phục (Ready-to-use)
           </button>
+          <button class="nav-tab" data-view="technical-view">
+            <span class="nav-tab-icon">🧩</span>
+            Kỹ Thuật (Schema)
+            <span class="tab-badge" id="techIssueBadge">–</span>
+          </button>
           <button class="nav-tab" data-view="qa-audit-view">
             <span class="nav-tab-icon">📋</span>
             Bảng Kiểm Duyệt QA Trước Xuất Bản
@@ -263,6 +298,20 @@
 
           <div class="prose-snippets-list" id="proseSnippetsContainer">
             <!-- Dynamically injected snippets -->
+          </div>
+        </div>
+
+        <!-- View: Technical Audit (Mục VI) -->
+        <div class="view-panel" id="technical-view">
+          <div class="card mb-4">
+            <div class="section-title-wrap">
+              <h3>Điểm Hoàn Thiện Kỹ Thuật – Mục VI</h3>
+              <p class="text-muted text-sm">Thang điểm riêng 100, chấm theo loại trang: sản phẩm (P1–P9, không có Article) hoặc blog / báo giá (A1–A8, bắt buộc Article). Kết quả này báo song song, không cộng vào điểm nội dung.</p>
+            </div>
+            <div class="tech-scale" id="techScaleList"></div>
+          </div>
+          <div id="techDetailContainer">
+            <div class="card tech-empty">Chưa có kết quả. Nhập URL rồi bấm <strong>🧩 Chỉ chấm kỹ thuật</strong> hoặc <strong>Bắt Đầu Audit Bằng AI</strong>.</div>
           </div>
         </div>
 

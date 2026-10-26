@@ -14,13 +14,18 @@ import httpx
 
 from app.config import BASE_DIR
 from app.agents_manager import agents_manager
+from app.tech_audit import run_technical_audit
 
 logger = logging.getLogger("eeat_engine")
 
-# Đường dẫn file quy chuẩn master
-RULE_FILE_PATH = BASE_DIR.parent / "check_EEAT.md"
-if not RULE_FILE_PATH.exists():
-    RULE_FILE_PATH = BASE_DIR / "check_EEAT.md"
+# Đường dẫn file quy chuẩn master: biến môi trường EEAT_RULE_FILE > tools/ của dự án dầu công nghiệp > thư mục cũ
+_RULE_CANDIDATES = [
+    Path(os.environ["EEAT_RULE_FILE"]) if os.environ.get("EEAT_RULE_FILE") else None,
+    Path("/root/site-dau-cong-nghiep/tools/check_EEAT.md"),
+    BASE_DIR.parent / "check_EEAT.md",
+    BASE_DIR / "check_EEAT.md",
+]
+RULE_FILE_PATH = next((p for p in _RULE_CANDIDATES if p and p.exists()), BASE_DIR / "check_EEAT.md")
 
 
 def get_master_rule_text() -> str:
@@ -85,6 +90,7 @@ async def fetch_article_from_url(url: str) -> Dict[str, Any]:
                 "success": True,
                 "title": title,
                 "content": cleaned_text,
+                "html": html,
                 "url": str(resp.url)
             }
     except Exception as e:
@@ -110,6 +116,9 @@ Hãy tiến hành KIỂM ĐỊNH TOÀN DIỆN bài viết/trang web dưới đâ
 \"\"\"
 {content}
 \"\"\"
+
+### LƯU Ý VỀ ĐIỂM KỸ THUẬT (MỤC VI):
+Mục VI (schema, Article, citation) được hệ thống chấm RIÊNG bằng quy tắc cố định từ HTML gốc. Bạn KHÔNG chấm Mục VI, KHÔNG cộng hoặc trừ điểm kỹ thuật vào overallScore và các dimensions. Tiêu chí Authoritativeness chỉ xét nguồn mà người đọc thấy trên trang.
 
 ### 3. YÊU CẦU ĐẦU RA:
 Bạn BẮT BUỘC phải trả về KẾT QUẢ ĐẦU RA LÀ DUY NHẤT MỘT KHỐI JSON HỢP LỆ (valid JSON), không kèm bất kỳ lời dẫn giải markdown nào bên ngoài khối JSON. Cấu trúc JSON phải đúng chuẩn 100% như sau:
@@ -285,6 +294,7 @@ class EEATEngine:
         article_title = "Kiểm tra nội dung"
         article_text = (content or "").strip()
         target_url = (url or "").strip()
+        raw_html = ""
 
         # 1. Nếu có URL và chưa có nội dung (hoặc nội dung quá ngắn), cào trang web
         if target_url and len(article_text) < 100:
@@ -296,12 +306,17 @@ class EEATEngine:
                 }
             article_text = scrape_res.get("content", "")
             article_title = scrape_res.get("title", article_title)
+            raw_html = scrape_res.get("html", "")
+            target_url = scrape_res.get("url", target_url)
 
         if not article_text:
             return {
                 "success": False,
                 "error": "Vui lòng nhập đường dẫn URL hợp lệ hoặc dán nội dung bài viết cần kiểm tra!"
             }
+
+        # Điểm kỹ thuật: chấm độc lập, không ảnh hưởng điểm nội dung
+        technical = await self.technical_audit_from_html(raw_html, target_url)
 
         rule_text = get_master_rule_text()
         prompt = build_audit_prompt(article_text, target_url, rule_text)
@@ -315,6 +330,7 @@ class EEATEngine:
         # kèm hướng dẫn cấu hình API Key để người dùng không bị nghẽn
         if not has_key:
             heuristic_result = self._run_heuristic_audit(article_text, target_url, article_title)
+            heuristic_result["technicalAudit"] = technical
             heuristic_result["analyzed_by"] = {
                 "agent_id": agent_id,
                 "agent_name": agent_data.get("name", agent_id),
@@ -359,6 +375,7 @@ class EEATEngine:
             fallback["raw_ai_output"] = raw_output[:500]
             parsed_json = fallback
 
+        parsed_json["technicalAudit"] = technical
         parsed_json["analyzed_by"] = {
             "agent_id": agent_id,
             "agent_name": agent_data.get("name", agent_id),
@@ -371,6 +388,30 @@ class EEATEngine:
             "success": True,
             "data": parsed_json
         }
+
+    async def technical_audit_from_html(self, html: str, url: str) -> Dict[str, Any]:
+        """Chấm Mục VI từ HTML gốc; nhập văn bản thì không có schema để chấm"""
+        if not html:
+            return {
+                "available": False,
+                "separateFromContent": True,
+                "reason": "Điểm kỹ thuật chỉ chấm được khi kiểm tra qua URL (cần HTML gốc chứa JSON-LD)."
+            }
+        try:
+            return await run_technical_audit(html, url)
+        except Exception as e:
+            logger.exception("Lỗi chấm kỹ thuật")
+            return {"available": False, "separateFromContent": True, "reason": f"Lỗi chấm kỹ thuật: {e}"}
+
+    async def technical_audit(self, url: str) -> Dict[str, Any]:
+        """Chỉ chấm điểm kỹ thuật (không gọi AI)"""
+        scrape_res = await fetch_article_from_url(url)
+        if not scrape_res.get("success"):
+            return {"success": False, "error": scrape_res.get("error", "Không thể lấy nội dung từ URL")}
+        data = await self.technical_audit_from_html(scrape_res.get("html", ""), scrape_res.get("url", url))
+        data["url"] = scrape_res.get("url", url)
+        data["title"] = scrape_res.get("title", "")
+        return {"success": True, "data": data}
 
     def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
         """Bóc tách JSON an toàn từ phản hồi của LLM"""

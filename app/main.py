@@ -327,6 +327,19 @@ async def audit_eeat_content(req: EEATAuditRequest):
         raise HTTPException(status_code=400, detail=res.get("error", "Lỗi kiểm định bài viết"))
     return res["data"]
 
+class EEATTechnicalRequest(BaseModel):
+    url: str
+
+@app.post("/api/eeat/technical")
+async def audit_eeat_technical(req: EEATTechnicalRequest):
+    """Chỉ chấm Điểm hoàn thiện kỹ thuật (Mục VI check_EEAT.md), không gọi AI, không cộng vào điểm nội dung"""
+    if not req.url.strip():
+        raise HTTPException(status_code=400, detail="Vui lòng nhập URL")
+    res = await eeat_engine.technical_audit(req.url.strip())
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Lỗi chấm kỹ thuật"))
+    return res["data"]
+
 @app.post("/api/eeat/save-key")
 async def save_eeat_key(req: SaveApiKeyRequest):
     """Lưu API key cho một AI Agent"""
