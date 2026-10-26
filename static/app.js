@@ -276,8 +276,12 @@ async function loadConfig() {
       cwdSelect.appendChild(opt);
     });
 
-    // Default to /root/site-dau-cong-nghiep if present, else first
-    const preferred = data.projects.find(p => p.path.includes("site-dau-cong-nghiep")) || data.projects[0];
+    // Ưu tiên thư mục đã chọn lần trước, sau đó site-dau-cong-nghiep, cuối cùng là mục đầu tiên
+    let savedCwd = null;
+    try { savedCwd = localStorage.getItem("activeCwd"); } catch (e) {}
+    const preferred = data.projects.find(p => p.path === savedCwd)
+      || data.projects.find(p => p.path.includes("site-dau-cong-nghiep"))
+      || data.projects[0];
     if (preferred) {
       cwdSelect.value = preferred.path;
       state.activeCwd = preferred.path;
@@ -287,8 +291,11 @@ async function loadConfig() {
 
     cwdSelect.addEventListener("change", (e) => {
       state.activeCwd = e.target.value;
+      try { localStorage.setItem("activeCwd", state.activeCwd); } catch (err) {}
       const badge = document.getElementById("cwd-badge");
       badge.textContent = state.activeCwd.split("/").pop() || "Root";
+      // Mở lại terminal tại thư mục mới
+      if (state.terminal) connectTerminalWs();
     });
 
     state.guides = data.guides || {};

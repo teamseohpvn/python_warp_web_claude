@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import (
-    BASE_DIR, PRESET_PROJECTS, PRESETS, LOG_DIR,
+    BASE_DIR, PRESET_PROJECTS, PRESETS, LOG_DIR, WORKSPACE_ROOT,
     TASK_LOG_DIR, SESSION_LOG_DIR, AUDIT_LOG_DIR,
     AUTH_ENABLED, AUTH_PASSWORD, AUTH_COOKIE_NAME,
     GUIDES
@@ -169,6 +169,14 @@ async def get_config():
             "badge": proj["badge"],
             "exists": p_path.exists()
         })
+    # Tự động thêm các thư mục con trong /root chưa có trong danh sách preset
+    known = {proj["path"] for proj in projects}
+    try:
+        for d in sorted(WORKSPACE_ROOT.iterdir()):
+            if d.is_dir() and not d.name.startswith(".") and str(d) not in known:
+                projects.append({"name": d.name, "path": str(d), "badge": "Auto", "exists": True})
+    except OSError:
+        pass
     return {
         "projects": projects,
         "presets": PRESETS,
