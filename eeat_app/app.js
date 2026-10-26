@@ -373,24 +373,49 @@ function populateModelSelect(agentId) {
   let defaultModel = "";
   if (agent && agent.models && agent.models.length) {
     const labels = agent.model_labels || {};
+    const groups = agent.model_groups || {};
+    // Antigravity đã có tên rõ (vd "Gemini 4 Argon (High)") → không cần kèm mã model
+    const withId = agent.models_source !== "antigravity";
     models = agent.models.map(id => ({
       value: id,
-      label: labels[id] && labels[id] !== id ? `${labels[id]} (${id})` : id
+      label: labels[id] && labels[id] !== id ? (withId ? `${labels[id]} (${id})` : labels[id]) : id,
+      group: groups[id] || ""
     }));
     defaultModel = agent.default_model;
   }
-  aiModelSelect.innerHTML = models
-    .map(m => `<option value="${m.value}" ${m.value === defaultModel ? "selected" : ""}>${m.label}</option>`)
-    .join("");
+  const option = m => `<option value="${m.value}" ${m.value === defaultModel ? "selected" : ""}>${m.label}</option>`;
+  const groupNames = [...new Set(models.map(m => m.group || ""))];
+  aiModelSelect.innerHTML = groupNames.length > 1
+    ? groupNames.map(g => `<optgroup label="${g}">${models.filter(m => (m.group || "") === g).map(option).join("")}</optgroup>`).join("")
+    : models.map(option).join("");
   const status = agent && agent.models_status;
   aiModelSelect.title = status && status.ok
-    ? `Danh sách lấy trực tiếp từ API (${status.count} model)`
+    ? `Danh sách lấy trực tiếp từ ${MODEL_SOURCE_LABELS[agent.models_source] || "API"} (${status.count} model)`
     : (status && status.error) || "";
+  renderModelSourceInfo(agent, models.length);
 }
 
-async function fetchAgentsStatus() {
+const MODEL_SOURCE_LABELS = {
+  claude_code: "Claude Code",
+  antigravity: "Antigravity CLI",
+  live: "API",
+  default: "danh sách mặc định"
+};
+
+function renderModelSourceInfo(agent, count) {
+  const info = document.getElementById("modelSourceInfo");
+  if (!info) return;
+  if (!agent) { info.textContent = ""; return; }
+  const parts = [MODEL_SOURCE_LABELS[agent.models_source] || agent.models_source || "danh sách mặc định", `${count} model`];
+  if (agent.models_updated_at) parts.push(`${agent.models_updated_at.slice(11, 16)} ${agent.models_updated_at.slice(8, 10)}/${agent.models_updated_at.slice(5, 7)}`);
+  if (agent.quota) parts.push(agent.quota);
+  if (agent.models_status && !agent.models_status.ok && agent.models_status.error) parts.push(agent.models_status.error);
+  info.textContent = parts.join(" · ");
+}
+
+async function fetchAgentsStatus(refresh = false) {
   try {
-    const res = await fetch("/api/eeat/agents");
+    const res = await fetch(`/api/eeat/agents${refresh ? "?refresh=true" : ""}`);
     if (res.ok) {
       const data = await res.json();
       availableAgentsData = data.agents || [];
@@ -414,6 +439,31 @@ async function fetchAgentsStatus() {
 }
 
 function setupListeners() {
+  // Chọn model → lưu làm mặc định của agent, lần mở sau vẫn giữ
+  aiModelSelect.addEventListener("change", async () => {
+    const model = aiModelSelect.value;
+    const agent = availableAgentsData.find(a => a.id === selectedAgent);
+    if (agent) agent.default_model = model;
+    try {
+      await fetch("/api/eeat/select-model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_id: selectedAgent, model })
+      });
+    } catch (err) {
+      console.log("Không lưu được model đã chọn:", err);
+    }
+  });
+
+  const btnRefreshModels = document.getElementById("btnRefreshModels");
+  btnRefreshModels.addEventListener("click", async () => {
+    btnRefreshModels.classList.add("loading");
+    btnRefreshModels.disabled = true;
+    await fetchAgentsStatus(true);
+    btnRefreshModels.classList.remove("loading");
+    btnRefreshModels.disabled = false;
+  });
+
   btnLoadPreset.addEventListener("click", () => {
     targetUrlInput.value = DEFAULT_AUDIT_DATA.url;
     currentAudit = JSON.parse(JSON.stringify(DEFAULT_AUDIT_DATA));
