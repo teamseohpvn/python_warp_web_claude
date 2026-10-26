@@ -1392,10 +1392,11 @@ function updateActiveAgentRunnerUI() {
 
   if (modelSelect && agent.models) {
     modelSelect.innerHTML = "";
+    const labels = agent.model_labels || {};
     agent.models.forEach(m => {
       const opt = document.createElement("option");
       opt.value = m;
-      opt.textContent = m;
+      opt.textContent = labels[m] && labels[m] !== m ? `${labels[m]} (${m})` : m;
       if (m === agent.default_model) opt.selected = true;
       modelSelect.appendChild(opt);
     });
