@@ -324,7 +324,7 @@ class EEATEngine:
         # 2. Kiểm tra xem agent có API key hay chưa
         cfg = agents_manager.load_config()
         agent_data = cfg.get("agents", {}).get(agent_id, {})
-        has_key = bool(agents_manager.get_effective_key(agent_data, custom_api_key))
+        has_key = agents_manager.has_credentials(agent_id, agent_data, custom_api_key)
 
         # Nếu chưa có API key cho Agent này, trả về phân tích Heuristic Rule Engine chất lượng cao
         # kèm hướng dẫn cấu hình API Key để người dùng không bị nghẽn
