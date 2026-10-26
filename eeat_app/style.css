@@ -1092,9 +1092,40 @@ body {
   gap: 6px;
 }
 
+.model-select-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.model-select-wrap .form-select-sm {
+  max-width: 260px;
+}
+
+.model-refresh-btn {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.model-refresh-btn:hover { color: #fff; border-color: var(--accent-blue); }
+.model-refresh-btn.loading { animation: model-refresh-spin 1s linear infinite; }
+
+.model-source-info {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  max-width: 360px;
+}
+
 .sub-label {
   font-size: 0.78rem;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .form-select-sm {
@@ -1279,3 +1310,5 @@ body {
 }
 .hidden { display: none !important; }
 .mb-4 { margin-bottom: 16px; }
+
+@keyframes model-refresh-spin { to { transform: rotate(360deg); } }

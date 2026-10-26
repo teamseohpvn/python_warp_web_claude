@@ -68,11 +68,15 @@
       </div>
 
       <div class="ai-bar-right">
-        <div class="model-select-group">
-          <label for="aiModelSelect" class="sub-label">Model:</label>
-          <select id="aiModelSelect" class="form-select-sm">
-            <!-- Populated via JS -->
-          </select>
+        <div class="model-select-wrap">
+          <div class="model-select-group">
+            <label for="aiModelSelect" class="sub-label">Model:</label>
+            <select id="aiModelSelect" class="form-select-sm">
+              <!-- Populated via JS -->
+            </select>
+            <button type="button" id="btnRefreshModels" class="model-refresh-btn" title="Lấy lại danh sách model và hạn mức">↻</button>
+          </div>
+          <div id="modelSourceInfo" class="model-source-info"></div>
         </div>
         <div class="temp-select-group">
           <label for="aiTempSelect" class="sub-label">Chế độ:</label>
