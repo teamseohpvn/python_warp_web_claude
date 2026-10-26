@@ -27,6 +27,9 @@ _RULE_CANDIDATES = [
 ]
 RULE_FILE_PATH = next((p for p in _RULE_CANDIDATES if p and p.exists()), BASE_DIR / "check_EEAT.md")
 
+# Độ dài tối đa của nội dung bài gửi cho AI (ký tự)
+MAX_ARTICLE_CHARS = 120000
+
 
 def get_master_rule_text() -> str:
     """Đọc quy chuẩn check_EEAT.md từ thư mục làm việc"""
@@ -74,17 +77,27 @@ async def fetch_article_from_url(url: str) -> Dict[str, Any]:
             title_match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
             title = title_match.group(1).strip() if title_match else url
 
-            # Loại bỏ script, style, nav, footer, header
-            clean_html = re.sub(r"<(script|style|nav|footer|header|noscript)[^>]*>.*?</\1>", " ", html, flags=re.IGNORECASE | re.DOTALL)
+            # Chỉ chấm nội dung chính: có <main> thì bỏ menu, banner cookie, nút Gọi/Zalo nằm ngoài <main>
+            main_match = re.search(r"<main\b[^>]*>(.*)</main>", html, re.IGNORECASE | re.DOTALL)
+            content_html = main_match.group(1) if main_match else html
+            # Loại bỏ script, style, nav, footer, noscript; <header> chỉ bỏ khi không có <main>
+            # (header trong <main> thường chứa H1 + byline tác giả – tín hiệu E-E-A-T cần chấm)
+            strip_tags = "script|style|nav|footer|noscript" + ("" if main_match else "|header")
+            clean_html = re.sub(rf"<({strip_tags})\b[^>]*>.*?</\1>", " ", content_html, flags=re.IGNORECASE | re.DOTALL)
             # Loại bỏ các tag HTML còn lại
             text = re.sub(r"<[^>]+>", " ", clean_html)
             # Chuẩn hóa khoảng trắng
             lines = [line.strip() for line in text.splitlines() if line.strip()]
             cleaned_text = "\n".join(lines)
 
-            # Giới hạn 20.000 ký tự để vừa vặn context window tối ưu
-            if len(cleaned_text) > 20000:
-                cleaned_text = cleaned_text[:20000] + "\n\n[...Nội dung dài đã được rút gọn...]"
+            # Giới hạn rộng (~40k token) – các model hiện tại đều có context ≥200k token.
+            # Nếu vẫn phải cắt, ghi rõ để AI không trừ điểm "bài bị cụt" oan.
+            if len(cleaned_text) > MAX_ARTICLE_CHARS:
+                cleaned_text = (
+                    cleaned_text[:MAX_ARTICLE_CHARS]
+                    + "\n\n[GHI CHÚ CỦA CÔNG CỤ: phần sau bị công cụ chấm điểm cắt bớt vì quá dài. "
+                    "Trang gốc KHÔNG bị cụt – không trừ điểm Trust/Effort vì lý do này.]"
+                )
 
             return {
                 "success": True,
