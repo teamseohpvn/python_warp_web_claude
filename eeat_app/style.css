@@ -1279,3 +1279,26 @@ body {
 }
 .hidden { display: none !important; }
 .mb-4 { margin-bottom: 16px; }
+
+/* ---------- Điện thoại: không tràn ngang ---------- */
+.dashboard-grid > * { min-width: 0; }
+
+@media (max-width: 640px) {
+  body { padding: 16px; }
+  .app-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .header-right { flex-wrap: wrap; gap: 8px; }
+  .ai-agent-control-bar { padding: 12px; }
+  .ai-bar-left, .ai-agent-pills { flex-wrap: wrap; max-width: 100%; }
+  .ai-bar-right { flex-direction: column; align-items: stretch; width: 100%; gap: 10px; }
+  .model-select-wrap, .model-select-group, .temp-select-group { width: 100%; }
+  .model-select-group .form-select-sm,
+  .temp-select-group .form-select-sm { flex: 1; min-width: 0; max-width: none; }
+  .model-source-info { max-width: none; }
+  .input-row { flex-wrap: wrap; }
+  .input-row .input-field-wrap { flex: 1 1 100%; }
+  .input-row .btn { flex: 1 1 auto; justify-content: center; }
+  .pill { gap: 8px; }
+  .pill-value { text-align: right; overflow-wrap: anywhere; }
+  .view-nav-tabs { overflow-x: auto; }
+  .nav-tab { flex: 0 0 auto; white-space: nowrap; }
+}
