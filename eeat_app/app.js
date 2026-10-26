@@ -399,7 +399,7 @@ async function fetchAgentsStatus() {
         if (dot) {
           if (ag.has_key) {
             dot.classList.add("has-key");
-            dot.title = `Đã cấu hình key: ${ag.masked_key}`;
+            dot.title = ag.auth_mode === "api_key" ? `Đã cấu hình key: ${ag.masked_key}` : ag.masked_key;
           } else {
             dot.classList.remove("has-key");
             dot.title = `Chưa có API key`;

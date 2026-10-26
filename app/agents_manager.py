@@ -39,6 +39,11 @@ CLAUDE_CODE_MODELS = {
 CLAUDE_CODE_STATUS_TTL = 300
 CLAUDE_CODE_TIMEOUT = 900
 
+# Antigravity CLI (`agy`) đã đăng nhập sẵn (tài khoản Google) → agent Gemini chạy qua `agy`, không cần API key.
+# Chạy ở chế độ plan + sandbox trong thư mục tạm rỗng để agent không sửa được file nào của server.
+ANTIGRAVITY_DEFAULT_MODEL = "gemini-4-argon-medium"
+ANTIGRAVITY_TIMEOUT = 900
+
 # Model đã bị nhà cung cấp ngừng hỗ trợ → loại khỏi config đã lưu
 RETIRED_MODEL_PREFIXES = ("claude-3",)
 
@@ -203,6 +208,7 @@ class AgentsManager:
         self._models_fetched_at: Dict[str, float] = {}
         self._models_lock = asyncio.Lock()
         self._claude_code_status: Dict[str, Any] = {"checked_at": 0, "logged_in": False, "auth_method": ""}
+        self._antigravity_status: Dict[str, Any] = {"checked_at": 0, "logged_in": False, "quota": ""}
         self._ensure_config()
 
     def claude_code_logged_in(self) -> bool:
@@ -233,8 +239,45 @@ class AgentsManager:
             return False
         return self.claude_code_logged_in()
 
+    def antigravity_logged_in(self) -> bool:
+        """Kiểm tra Antigravity CLI có sẵn và đã đăng nhập (cache 5 phút).
+        `agy -p=/quota` không tốn hạn mức và không tạo hội thoại mới."""
+        st = self._antigravity_status
+        if time.time() - st["checked_at"] < CLAUDE_CODE_STATUS_TTL:
+            return st["logged_in"]
+        logged_in, quota = False, ""
+        if shutil.which("agy"):
+            try:
+                proc = subprocess.run(
+                    ["agy", "-p=/quota"], capture_output=True, text=True, timeout=30,
+                    cwd=tempfile.gettempdir()
+                )
+                if proc.returncode == 0 and "Limit" in proc.stdout:
+                    logged_in = True
+                    for line in proc.stdout.splitlines():
+                        cols = line.split("\t")
+                        if len(cols) >= 3 and cols[0] == "Gemini Models" and "Five Hour" in cols[1]:
+                            quota = f"còn {cols[2]} hạn mức Gemini 5 giờ"
+            except Exception as e:
+                print(f"[AgentsManager] Không kiểm tra được Antigravity CLI: {e}")
+        self._antigravity_status = {"checked_at": time.time(), "logged_in": logged_in, "quota": quota}
+        return logged_in
+
+    def uses_antigravity(self, agent_id: str, agent_data: Dict[str, Any], custom_key: Optional[str] = None) -> bool:
+        """Agent Gemini ưu tiên Antigravity CLI đã đăng nhập; chỉ dùng API key khi được truyền key riêng
+        hoặc Antigravity chưa đăng nhập"""
+        if agent_data.get("provider", agent_id) != "google":
+            return False
+        if custom_key and custom_key.strip():
+            return False
+        return self.antigravity_logged_in()
+
     def has_credentials(self, agent_id: str, agent_data: Dict[str, Any], custom_key: Optional[str] = None) -> bool:
-        return bool(self.get_effective_key(agent_data, custom_key)) or self.uses_claude_code(agent_id, agent_data, custom_key)
+        return (
+            bool(self.get_effective_key(agent_data, custom_key))
+            or self.uses_claude_code(agent_id, agent_data, custom_key)
+            or self.uses_antigravity(agent_id, agent_data, custom_key)
+        )
 
     def _ensure_config(self):
         """Đảm bảo file cấu hình tồn tại và đồng bộ các model mới nhất"""
@@ -321,10 +364,14 @@ class AgentsManager:
         for a_id, a_data in agents_dict.items():
             key = self.get_effective_key(a_data)
             claude_code = self.uses_claude_code(a_id, a_data)
-            has_key = bool(key) or claude_code
+            antigravity = self.uses_antigravity(a_id, a_data)
+            has_key = bool(key) or claude_code or antigravity
             masked_key = ""
             if claude_code:
                 masked_key = f"Claude Code đã đăng nhập ({self._claude_code_status['auth_method'] or 'claude.ai'})"
+            elif antigravity:
+                quota = self._antigravity_status["quota"]
+                masked_key = "Antigravity CLI đã đăng nhập" + (f" ({quota})" if quota else "")
             elif has_key:
                 if len(key) > 8:
                     masked_key = key[:4] + "..." + key[-4:]
@@ -343,7 +390,7 @@ class AgentsManager:
                 "api_key_env": a_data.get("api_key_env", ""),
                 "has_key": has_key,
                 "masked_key": masked_key,
-                "auth_mode": "claude_code" if claude_code else "api_key",
+                "auth_mode": "claude_code" if claude_code else "antigravity" if antigravity else "api_key",
                 "base_url": a_data.get("base_url", ""),
                 "default_model": a_data.get("default_model", ""),
                 "models": a_data.get("models", []),
@@ -453,6 +500,20 @@ class AgentsManager:
 
         return _sort_models(models)
 
+    def _fetch_antigravity_models(self) -> List[Dict[str, Any]]:
+        """Lấy danh sách model Gemini mà tài khoản Antigravity được dùng (`agy models`, giữ thứ tự của CLI)"""
+        proc = subprocess.run(
+            ["agy", "models"], capture_output=True, text=True, timeout=60, cwd=tempfile.gettempdir()
+        )
+        if proc.returncode != 0:
+            raise RuntimeError((proc.stderr or proc.stdout or "").strip()[:300] or f"agy models exit {proc.returncode}")
+        models = []
+        for line in proc.stdout.splitlines():
+            cols = line.strip().split("\t")
+            if len(cols) >= 2 and cols[0].startswith("gemini-"):
+                models.append({"id": cols[0], "label": f"{cols[1]} – Antigravity CLI"})
+        return models
+
     async def refresh_models(self, force: bool = False) -> Dict[str, Dict[str, Any]]:
         """Lấy danh sách model mới nhất của mọi agent có API key (chạy song song) và lưu vào config.
         Lỗi mạng/key sai → giữ nguyên danh sách đã lưu lần trước."""
@@ -463,6 +524,7 @@ class AgentsManager:
             loop = asyncio.get_event_loop()
 
             jobs = {}
+            antigravity_ids = set()
             changed = False
             for a_id, a_data in agents.items():
                 if self.uses_claude_code(a_id, a_data):
@@ -478,6 +540,12 @@ class AgentsManager:
                         a_data["default_model"] = "opus"
                         changed = True
                     self._models_status[a_id] = {"ok": True, "count": len(ids), "mode": "claude_code"}
+                    continue
+                if self.uses_antigravity(a_id, a_data):
+                    if not force and now - self._models_fetched_at.get(a_id, 0) < MODELS_CACHE_TTL:
+                        continue
+                    antigravity_ids.add(a_id)
+                    jobs[a_id] = loop.run_in_executor(None, self._fetch_antigravity_models)
                     continue
                 key = self.get_effective_key(a_data)
                 if not key:
@@ -505,8 +573,15 @@ class AgentsManager:
                 ids = [m["id"] for m in result]
                 agent["models"] = ids
                 agent["model_labels"] = {m["id"]: m["label"] for m in result}
-                agent["models_source"] = "live"
                 agent["models_updated_at"] = datetime.now().isoformat(timespec="seconds")
+                if a_id in antigravity_ids:
+                    agent["models_source"] = "antigravity"
+                    if agent.get("default_model") not in ids:
+                        agent["default_model"] = ANTIGRAVITY_DEFAULT_MODEL if ANTIGRAVITY_DEFAULT_MODEL in ids else ids[0]
+                    self._models_status[a_id] = {"ok": True, "count": len(ids), "mode": "antigravity"}
+                    changed = True
+                    continue
+                agent["models_source"] = "live"
                 if agent.get("default_model") not in ids:
                     family = PREFERRED_DEFAULT_FAMILY.get(a_id, "")
                     agent["default_model"] = next((i for i in ids if family and family in i), ids[0])
@@ -546,6 +621,10 @@ class AgentsManager:
             if self.uses_claude_code(agent_id, agent, custom_api_key):
                 res = await loop.run_in_executor(
                     None, self._call_claude_code, active_model, prompt, active_sys_prompt
+                )
+            elif self.uses_antigravity(agent_id, agent, custom_api_key):
+                res = await loop.run_in_executor(
+                    None, self._call_antigravity, active_model, prompt, active_sys_prompt
                 )
             elif provider == "anthropic" or agent_id == "claude":
                 res = await loop.run_in_executor(
@@ -613,6 +692,67 @@ class AgentsManager:
             "mode": "claude_code",
             "response": data.get("result", ""),
             "usage": data.get("usage", {})
+        }
+
+    def _call_antigravity(self, model: str, prompt: str, system_prompt: str) -> Dict[str, Any]:
+        """Gọi Gemini qua Antigravity CLI đã đăng nhập (`agy`), không dùng API key.
+        Nội dung gửi qua stdin (stream-json) để bài dài không vượt giới hạn tham số dòng lệnh."""
+        # agy không có cờ system prompt → ghép vào đầu tin nhắn
+        content = (
+            "Trả lời trực tiếp trong tin nhắn này. Không dùng công cụ, không tạo file, không lập kế hoạch.\n\n"
+            + (f"{system_prompt}\n\n---\n\n" if system_prompt else "")
+            + prompt
+        )
+        message = json.dumps({"event": "user", "message": {"content": content}}, ensure_ascii=False)
+        cmd = [
+            "agy", "--print=", "--input-format", "stream-json", "--output-format", "stream-json",
+            "--mode", "plan", "--sandbox", "--disable-slash-commands",
+        ]
+        if model:
+            cmd += ["--model", model]
+
+        # Bỏ API key khỏi env để CLI dùng phiên đăng nhập Google thay vì key
+        env = os.environ.copy()
+        env.pop("GEMINI_API_KEY", None)
+        env.pop("GOOGLE_API_KEY", None)
+
+        workdir = tempfile.mkdtemp(prefix="eeat-agy-")
+        try:
+            proc = subprocess.run(
+                cmd, input=message + "\n", capture_output=True, text=True,
+                timeout=ANTIGRAVITY_TIMEOUT, cwd=workdir, env=env
+            )
+        except subprocess.TimeoutExpired:
+            return {"success": False, "error": f"Antigravity CLI quá {ANTIGRAVITY_TIMEOUT} giây không phản hồi"}
+        except Exception as e:
+            return {"success": False, "error": f"Antigravity CLI Error: {str(e)}"}
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+        result, active_model = None, model
+        for line in proc.stdout.splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("event") == "init":
+                active_model = (event.get("init") or {}).get("model") or active_model
+            elif event.get("event") == "result":
+                result = event.get("result") or {}
+
+        if result is None:
+            detail = (proc.stderr or proc.stdout or "").strip()[:500]
+            return {"success": False, "error": f"Antigravity CLI lỗi (exit {proc.returncode}): {detail}"}
+        if result.get("status") != "SUCCESS":
+            return {"success": False, "error": f"Antigravity CLI: {result.get('error') or result.get('status')}"}
+
+        return {
+            "success": True,
+            "agent": "gemini",
+            "model": active_model,
+            "mode": "antigravity",
+            "response": (result.get("response") or "").strip(),
+            "usage": result.get("usage", {})
         }
 
     def _call_anthropic(
