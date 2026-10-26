@@ -272,7 +272,9 @@ async def get_report_content(path: str = Query(...)):
 # --- Multi-Agent API Endpoints (Claude, Gemini, GPT Code, Grok) ---
 
 @app.get("/api/agents", dependencies=[Depends(require_auth)])
-async def get_agents():
+async def get_agents(refresh: bool = False):
+    # Mỗi lần load app: lấy danh sách model mới nhất từ API của từng nhà cung cấp
+    await agents_manager.refresh_models(force=refresh)
     return agents_manager.get_public_agents_info()
 
 @app.post("/api/agents/select", dependencies=[Depends(require_auth)])
@@ -310,6 +312,7 @@ async def run_agent(req: RunAgentRequest):
 @app.get("/api/eeat/agents")
 async def get_eeat_agents():
     """Lấy danh sách 4 AI Agents hỗ trợ cho EEAT Audit (Claude, Gemini, GPT, Grok)"""
+    await agents_manager.refresh_models()
     return agents_manager.get_public_agents_info()
 
 @app.post("/api/eeat/audit")

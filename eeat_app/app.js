@@ -215,10 +215,10 @@ Phuy thép 200L ENEOS chính hãng từ nhà máy Đình Vũ (Hải Phòng) luô
 // Model mapping for quick population
 const AGENT_MODELS = {
   "claude": [
-    { value: "claude-3-7-sonnet-20250219", label: "claude-3-7-sonnet (Flagship 3.7 Sonnet - Mới nhất)" },
-    { value: "claude-3-5-sonnet-20241022", label: "claude-3-5-sonnet (Sonnet v2 - Chuẩn E-E-A-T)" },
-    { value: "claude-3-5-haiku-20241022", label: "claude-3-5-haiku (Haiku - Siêu tốc độ)" },
-    { value: "claude-3-opus-20240229", label: "claude-3-opus (Opus - Chuyên sâu phức tạp)" }
+    { value: "claude-opus-5-5", label: "claude-opus-5-5 (Opus 5.5 - Chuyên sâu E-E-A-T)" },
+    { value: "claude-fable-5-1", label: "claude-fable-5-1 (Fable 5.1 - Mạnh nhất, giá cao)" },
+    { value: "claude-sonnet-5-5", label: "claude-sonnet-5-5 (Sonnet 5.5 - Cân bằng)" },
+    { value: "claude-haiku-5-5", label: "claude-haiku-5-5 (Haiku 5.5 - Siêu tốc độ)" }
   ],
   "gemini": [
     { value: "gemini-3.8-flash", label: "gemini-3.8-flash (Gemini 3.8 Flash - Siêu tốc & Mới nhất)" },
@@ -367,8 +367,25 @@ function setupAgentSelection() {
 }
 
 function populateModelSelect(agentId) {
-  const models = AGENT_MODELS[agentId] || [];
-  aiModelSelect.innerHTML = models.map(m => `<option value="${m.value}">${m.label}</option>`).join("");
+  // Ưu tiên danh sách model lấy trực tiếp từ API (mới nhất lên đầu); AGENT_MODELS chỉ là dự phòng
+  const agent = availableAgentsData.find(a => a.id === agentId);
+  let models = AGENT_MODELS[agentId] || [];
+  let defaultModel = "";
+  if (agent && agent.models && agent.models.length) {
+    const labels = agent.model_labels || {};
+    models = agent.models.map(id => ({
+      value: id,
+      label: labels[id] && labels[id] !== id ? `${labels[id]} (${id})` : id
+    }));
+    defaultModel = agent.default_model;
+  }
+  aiModelSelect.innerHTML = models
+    .map(m => `<option value="${m.value}" ${m.value === defaultModel ? "selected" : ""}>${m.label}</option>`)
+    .join("");
+  const status = agent && agent.models_status;
+  aiModelSelect.title = status && status.ok
+    ? `Danh sách lấy trực tiếp từ API (${status.count} model)`
+    : (status && status.error) || "";
 }
 
 async function fetchAgentsStatus() {
@@ -389,6 +406,7 @@ async function fetchAgentsStatus() {
           }
         }
       });
+      populateModelSelect(selectedAgent);
     }
   } catch (err) {
     console.log("Chạy ở chế độ frontend độc lập:", err);

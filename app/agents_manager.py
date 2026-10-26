@@ -1,14 +1,41 @@
 import os
+import re
 import json
+import time
 import asyncio
+import urllib.parse
 import urllib.request
 import urllib.error
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 from app.config import BASE_DIR
 
 CONFIG_FILE_PATH = BASE_DIR / "config" / "agents_config.json"
+
+# Danh sách model được lấy trực tiếp từ API mỗi lần load app.
+# Cache ngắn chỉ để tránh gọi trùng khi nhiều tab/endpoint load cùng lúc.
+MODELS_CACHE_TTL = 60
+MODELS_FETCH_TIMEOUT = 10
+
+# Model không dùng được để chat/viết bài (embedding, ảnh, âm thanh...)
+NON_CHAT_KEYWORDS = (
+    "embedding", "tts", "whisper", "dall-e", "moderation", "davinci", "babbage",
+    "audio", "realtime", "transcribe", "image", "imagen", "imagine", "search",
+    "aqa", "sora", "computer-use", "veo", "instruct", "-live"
+)
+
+# Model đã bị nhà cung cấp ngừng hỗ trợ → loại khỏi config đã lưu
+RETIRED_MODEL_PREFIXES = ("claude-3",)
+
+# Họ model ưu tiên làm mặc định khi model mặc định cũ không còn trong danh sách
+PREFERRED_DEFAULT_FAMILY = {
+    "claude": "opus",
+    "gemini": "pro",
+    "gpt_code": "gpt-",
+    "grok": "grok",
+}
 
 DEFAULT_AGENTS_CONFIG = {
     "active_agent": "claude",
@@ -25,12 +52,12 @@ DEFAULT_AGENTS_CONFIG = {
             "api_key_env": "ANTHROPIC_API_KEY",
             "api_key": "",
             "base_url": "https://api.anthropic.com/v1",
-            "default_model": "claude-3-7-sonnet-20250219",
+            "default_model": "claude-opus-5-5",
             "models": [
-                "claude-3-7-sonnet-20250219",
-                "claude-3-5-sonnet-20241022",
-                "claude-3-5-haiku-20241022",
-                "claude-3-opus-20240229"
+                "claude-fable-5-1",
+                "claude-opus-5-5",
+                "claude-sonnet-5-5",
+                "claude-haiku-5-5"
             ],
             "max_tokens": 8192,
             "temperature": 0.7,
@@ -118,9 +145,50 @@ DEFAULT_AGENTS_CONFIG = {
 }
 
 
+def _parse_created(value: Any) -> int:
+    """Chuẩn hóa thời điểm phát hành model về epoch (giây)"""
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str) and value:
+        try:
+            return int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp())
+        except ValueError:
+            return 0
+    return 0
+
+
+def _version_key(model_id: str) -> tuple:
+    """Tách số phiên bản từ tên model, bỏ hậu tố ngày (vd claude-3-7-sonnet-20250219 → (3, 7))"""
+    stripped = re.sub(r"\d{4}-\d{2}-\d{2}|\d{8}", "", model_id)
+    return tuple(float(n) for n in re.findall(r"\d+(?:\.\d+)?", stripped))
+
+
+def _sort_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sắp xếp model mới nhất lên đầu: theo ngày phát hành, rồi theo số phiên bản"""
+    return sorted(
+        models,
+        key=lambda m: (m.get("created", 0), _version_key(m["id"]), m["id"]),
+        reverse=True
+    )
+
+
+def _is_chat_model(model_id: str) -> bool:
+    lowered = model_id.lower()
+    return not any(k in lowered for k in NON_CHAT_KEYWORDS)
+
+
+def _http_get_json(url: str, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    req = urllib.request.Request(url, headers=headers or {}, method="GET")
+    with urllib.request.urlopen(req, timeout=MODELS_FETCH_TIMEOUT) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
 class AgentsManager:
     def __init__(self):
         self.config_path = CONFIG_FILE_PATH
+        self._models_status: Dict[str, Dict[str, Any]] = {}
+        self._models_fetched_at: Dict[str, float] = {}
+        self._models_lock = asyncio.Lock()
         self._ensure_config()
 
     def _ensure_config(self):
@@ -148,7 +216,7 @@ class AgentsManager:
                             if m not in merged_models:
                                 merged_models.append(m)
                         for m in cur_models:
-                            if m not in merged_models:
+                            if m not in merged_models and not m.startswith(RETIRED_MODEL_PREFIXES):
                                 merged_models.append(m)
                         if merged_models != cur_models:
                             existing_agent["models"] = merged_models
@@ -230,6 +298,10 @@ class AgentsManager:
                 "base_url": a_data.get("base_url", ""),
                 "default_model": a_data.get("default_model", ""),
                 "models": a_data.get("models", []),
+                "model_labels": a_data.get("model_labels", {}),
+                "models_source": a_data.get("models_source", "default"),
+                "models_updated_at": a_data.get("models_updated_at", ""),
+                "models_status": self._models_status.get(a_id, {}),
                 "max_tokens": a_data.get("max_tokens", 4096),
                 "temperature": a_data.get("temperature", 0.7),
                 "system_prompt": a_data.get("system_prompt", ""),
@@ -264,7 +336,126 @@ class AgentsManager:
             if field in updates:
                 agent_data[field] = updates[field]
 
+        # Đổi key/base_url → lần load sau phải lấy lại danh sách model
+        if "api_key" in updates or "base_url" in updates:
+            self._models_fetched_at.pop(agent_id, None)
+
         return self.save_config(cfg)
+
+    def _fetch_models(self, agent_id: str, agent: Dict[str, Any], key: str) -> List[Dict[str, Any]]:
+        """Gọi API của nhà cung cấp để lấy danh sách model mà API key được phép dùng"""
+        provider = agent.get("provider", agent_id)
+        base_url = (agent.get("base_url") or "").rstrip("/")
+        models: List[Dict[str, Any]] = []
+
+        if provider == "anthropic":
+            base_url = base_url or "https://api.anthropic.com/v1"
+            headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
+            after_id = None
+            while True:
+                params = {"limit": 1000}
+                if after_id:
+                    params["after_id"] = after_id
+                data = _http_get_json(f"{base_url}/models?{urllib.parse.urlencode(params)}", headers)
+                for m in data.get("data", []):
+                    models.append({
+                        "id": m["id"],
+                        "label": m.get("display_name") or m["id"],
+                        "created": _parse_created(m.get("created_at")),
+                    })
+                if not data.get("has_more") or not data.get("last_id"):
+                    break
+                after_id = data["last_id"]
+
+        elif provider == "google":
+            base_url = base_url or "https://generativelanguage.googleapis.com/v1beta"
+            page_token = None
+            while True:
+                params = {"key": key, "pageSize": 1000}
+                if page_token:
+                    params["pageToken"] = page_token
+                data = _http_get_json(f"{base_url}/models?{urllib.parse.urlencode(params)}")
+                for m in data.get("models", []):
+                    model_id = m.get("name", "").replace("models/", "")
+                    if not model_id.startswith("gemini"):
+                        continue
+                    if "generateContent" not in m.get("supportedGenerationMethods", []):
+                        continue
+                    if not _is_chat_model(model_id):
+                        continue
+                    models.append({"id": model_id, "label": m.get("displayName") or model_id, "created": 0})
+                page_token = data.get("nextPageToken")
+                if not page_token:
+                    break
+
+        elif provider in ("openai", "xai"):
+            default_base = "https://api.openai.com/v1" if provider == "openai" else "https://api.x.ai/v1"
+            base_url = base_url or default_base
+            data = _http_get_json(f"{base_url}/models", {"Authorization": f"Bearer {key}"})
+            id_pattern = r"^(gpt-|chatgpt-|o\d)" if provider == "openai" else r"^grok"
+            for m in data.get("data", []):
+                model_id = m.get("id", "")
+                if not re.match(id_pattern, model_id) or not _is_chat_model(model_id):
+                    continue
+                models.append({"id": model_id, "label": model_id, "created": _parse_created(m.get("created"))})
+
+        else:
+            raise ValueError(f"Nhà cung cấp '{provider}' chưa hỗ trợ lấy danh sách model")
+
+        return _sort_models(models)
+
+    async def refresh_models(self, force: bool = False) -> Dict[str, Dict[str, Any]]:
+        """Lấy danh sách model mới nhất của mọi agent có API key (chạy song song) và lưu vào config.
+        Lỗi mạng/key sai → giữ nguyên danh sách đã lưu lần trước."""
+        async with self._models_lock:
+            cfg = self.load_config()
+            agents = cfg.get("agents", {})
+            now = time.time()
+            loop = asyncio.get_event_loop()
+
+            jobs = {}
+            for a_id, a_data in agents.items():
+                key = self.get_effective_key(a_data)
+                if not key:
+                    self._models_status[a_id] = {"ok": False, "error": "Chưa có API key – dùng danh sách mặc định"}
+                    continue
+                if not force and now - self._models_fetched_at.get(a_id, 0) < MODELS_CACHE_TTL:
+                    continue
+                jobs[a_id] = loop.run_in_executor(None, self._fetch_models, a_id, a_data, key)
+
+            if not jobs:
+                return self._models_status
+
+            results = await asyncio.gather(*jobs.values(), return_exceptions=True)
+            changed = False
+            for a_id, result in zip(jobs.keys(), results):
+                self._models_fetched_at[a_id] = now
+                if isinstance(result, Exception):
+                    if isinstance(result, urllib.error.HTTPError):
+                        err = f"HTTP {result.code}" + (" – API key không hợp lệ" if result.code in (401, 403) else "")
+                    else:
+                        err = str(result) or result.__class__.__name__
+                    self._models_status[a_id] = {"ok": False, "error": f"Không lấy được danh sách model: {err}"}
+                    continue
+                if not result:
+                    self._models_status[a_id] = {"ok": False, "error": "API không trả về model chat nào"}
+                    continue
+
+                agent = agents[a_id]
+                ids = [m["id"] for m in result]
+                agent["models"] = ids
+                agent["model_labels"] = {m["id"]: m["label"] for m in result}
+                agent["models_source"] = "live"
+                agent["models_updated_at"] = datetime.now().isoformat(timespec="seconds")
+                if agent.get("default_model") not in ids:
+                    family = PREFERRED_DEFAULT_FAMILY.get(a_id, "")
+                    agent["default_model"] = next((i for i in ids if family and family in i), ids[0])
+                self._models_status[a_id] = {"ok": True, "count": len(ids)}
+                changed = True
+
+            if changed:
+                self.save_config(cfg)
+            return self._models_status
 
     async def execute_agent(
         self,
@@ -334,7 +525,7 @@ class AgentsManager:
         payload = {
             "model": model,
             "max_tokens": max_tokens,
-            "temperature": temperature,
+            # Không gửi temperature: từ 21/10/2026 Anthropic trả lỗi 400 nếu có tham số này
             "messages": [
                 {"role": "user", "content": prompt}
             ]
